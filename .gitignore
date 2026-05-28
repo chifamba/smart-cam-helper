@@ -9,3 +9,7 @@ Thumbs.db
 .idea/
 *.iml
 .vscode/
+build/
+app/build/
+.gradle/
+local.properties
