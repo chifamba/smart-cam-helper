@@ -1061,11 +1061,51 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun findSonyDevice(
+        bonded: Set<android.bluetooth.BluetoothDevice>?,
+        connected: List<android.bluetooth.BluetoothDevice>?
+    ): android.bluetooth.BluetoothDevice? {
+        connected?.forEach { device ->
+            val name = if (ActivityCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED || Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+                device.name
+            } else null
+            if (!name.isNullOrEmpty() && (name.contains("Sony", ignoreCase = true) || name.contains("ILCE", ignoreCase = true) || name.contains("DSC", ignoreCase = true))) {
+                return device
+            }
+        }
+        
+        bonded?.forEach { device ->
+            val name = if (ActivityCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED || Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+                device.name
+            } else null
+            if (!name.isNullOrEmpty() && (name.contains("Sony", ignoreCase = true) || name.contains("ILCE", ignoreCase = true) || name.contains("DSC", ignoreCase = true))) {
+                return device
+            }
+        }
+        return null
+    }
+
     private fun startBleScan() {
         val adapter = bluetoothAdapter
         if (adapter == null || !adapter.isEnabled) {
             Toast.makeText(this, "Please enable Bluetooth first", Toast.LENGTH_SHORT).show()
             return
+        }
+
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED || Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+            val bondedDevices = adapter.bondedDevices
+            val bluetoothManager = getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
+            val connectedDevices = bluetoothManager.getConnectedDevices(android.bluetooth.BluetoothProfile.GATT)
+
+            val matchedDevice = findSonyDevice(bondedDevices, connectedDevices)
+            if (matchedDevice != null) {
+                val deviceName = matchedDevice.name ?: "Sony Camera"
+                discoveredDeviceAddress = matchedDevice.address
+                statusTextView.text = "Status: Found Connected/Paired Camera!\nName: $deviceName\nAddress: ${matchedDevice.address}"
+                startServiceButton.isEnabled = true
+                Toast.makeText(this, "Automatically detected paired/connected camera: $deviceName", Toast.LENGTH_LONG).show()
+                return
+            }
         }
 
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED) {
@@ -1271,9 +1311,9 @@ class MainActivity : AppCompatActivity() {
     private fun getAppVersion(): String {
         return try {
             val pInfo = packageManager.getPackageInfo(packageName, 0)
-            pInfo.versionName ?: "1.3"
+            pInfo.versionName ?: "1.4"
         } catch (e: Exception) {
-            "1.3"
+            "1.4"
         }
     }
 }
