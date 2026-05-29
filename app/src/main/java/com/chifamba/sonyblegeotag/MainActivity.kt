@@ -91,14 +91,34 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private var pendingBlePhotoUri: android.net.Uri? = null
+    private var pendingBlePhotoFile: java.io.File? = null
+
+    private fun cacheSelectedPhoto(uri: android.net.Uri): java.io.File? {
+        return try {
+            val cachedFile = java.io.File(cacheDir, "ble_transferred_photo_temp.jpg")
+            contentResolver.openInputStream(uri)?.use { inputStream ->
+                java.io.FileOutputStream(cachedFile).use { outputStream ->
+                    inputStream.copyTo(outputStream)
+                }
+            }
+            cachedFile
+        } catch (e: Exception) {
+            Log.e("SonyMainActivity", "Failed to cache selected photo", e)
+            null
+        }
+    }
 
     private val selectBlePhotoLauncher = registerForActivityResult(
         ActivityResultContracts.GetContent()
     ) { uri ->
         if (uri != null) {
-            pendingBlePhotoUri = uri
-            startBlePhotoTransferSimulation()
+            val cachedFile = cacheSelectedPhoto(uri)
+            if (cachedFile != null) {
+                pendingBlePhotoFile = cachedFile
+                startBlePhotoTransferSimulation()
+            } else {
+                Toast.makeText(this, "Failed to read chosen photo", Toast.LENGTH_SHORT).show()
+            }
         }
     }
 
@@ -481,42 +501,40 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun completeBlePhotoFetchWithUri() {
-        val uri = pendingBlePhotoUri ?: return
+        val file = pendingBlePhotoFile ?: return
         try {
-            previewImageView.setImageURI(uri)
+            previewImageView.setImageURI(android.net.Uri.fromFile(file))
             previewImageView.visibility = android.view.View.VISIBLE
 
-            contentResolver.openInputStream(uri)?.use { inputStream ->
-                val exif = androidx.exifinterface.media.ExifInterface(inputStream)
-                val latLong = exif.latLong
-                val dateTime = exif.getAttribute(androidx.exifinterface.media.ExifInterface.TAG_DATETIME)
+            val exif = androidx.exifinterface.media.ExifInterface(file.absolutePath)
+            val latLong = exif.latLong
+            val dateTime = exif.getAttribute(androidx.exifinterface.media.ExifInterface.TAG_DATETIME)
 
-                if (latLong != null) {
-                    val lat = latLong[0]
-                    val lng = latLong[1]
-                    val mapLink = "https://www.google.com/maps/search/?api=1&query=$lat,$lng"
+            if (latLong != null) {
+                val lat = latLong[0]
+                val lng = latLong[1]
+                val mapLink = "https://www.google.com/maps/search/?api=1&query=$lat,$lng"
 
-                    metadataResultTextView.text = buildString {
-                        append("✅ BLE PHOTO VERIFIED!\n\n")
-                        append("Successfully fetched photo from DSC-RX100M7 over Bluetooth.\n\n")
-                        append("Latitude: $lat\n")
-                        append("Longitude: $lng\n")
-                        if (!dateTime.isNullOrEmpty()) {
-                            append("Capture Time: $dateTime\n")
-                        }
-                        append("\nMap Link:\n$mapLink")
+                metadataResultTextView.text = buildString {
+                    append("✅ BLE PHOTO VERIFIED!\n\n")
+                    append("Successfully fetched photo from DSC-RX100M7 over Bluetooth.\n\n")
+                    append("Latitude: $lat\n")
+                    append("Longitude: $lng\n")
+                    if (!dateTime.isNullOrEmpty()) {
+                        append("Capture Time: $dateTime\n")
                     }
-                    metadataResultTextView.setTextColor(android.graphics.Color.parseColor("#1B5E20")) // Dark green
-                    metadataResultTextView.setBackgroundColor(android.graphics.Color.parseColor("#E8F5E9")) // Light green
-                } else {
-                    metadataResultTextView.text = buildString {
-                        append("❌ NO GPS METADATA FOUND IN TRANSFER!\n\n")
-                        append("Bluetooth transfer succeeded, but this photo does not contain embedded coordinates.\n\n")
-                        append("Ensure that 'Location Info Link' is active and connected on your camera screen, and your phone has location enabled when shooting.")
-                    }
-                    metadataResultTextView.setTextColor(android.graphics.Color.parseColor("#B71C1C")) // Dark red
-                    metadataResultTextView.setBackgroundColor(android.graphics.Color.parseColor("#FFEBEE")) // Light red
+                    append("\nMap Link:\n$mapLink")
                 }
+                metadataResultTextView.setTextColor(android.graphics.Color.parseColor("#1B5E20")) // Dark green
+                metadataResultTextView.setBackgroundColor(android.graphics.Color.parseColor("#E8F5E9")) // Light green
+            } else {
+                metadataResultTextView.text = buildString {
+                    append("❌ NO GPS METADATA FOUND IN TRANSFER!\n\n")
+                    append("Bluetooth transfer succeeded, but this photo does not contain embedded coordinates.\n\n")
+                    append("Ensure that 'Location Info Link' is active and connected on your camera screen, and your phone has location enabled when shooting.")
+                }
+                metadataResultTextView.setTextColor(android.graphics.Color.parseColor("#B71C1C")) // Dark red
+                metadataResultTextView.setBackgroundColor(android.graphics.Color.parseColor("#FFEBEE")) // Light red
             }
         } catch (e: Exception) {
             Log.e("SonyMainActivity", "Error parsing image EXIF", e)
