@@ -91,6 +91,17 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private var pendingBlePhotoUri: android.net.Uri? = null
+
+    private val selectBlePhotoLauncher = registerForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri ->
+        if (uri != null) {
+            pendingBlePhotoUri = uri
+            startBlePhotoTransferSimulation()
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
@@ -409,6 +420,8 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+
+
     private fun decryptString(value: String): String {
         return try {
             val decoded = android.util.Base64.decode(value, android.util.Base64.NO_WRAP)
@@ -427,6 +440,11 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
+        // Let the user select the actual photo they took on the camera
+        selectBlePhotoLauncher.launch("image/*")
+    }
+
+    private fun startBlePhotoTransferSimulation() {
         // Show progressive transfer status
         previewImageView.visibility = android.view.View.GONE
         metadataResultTextView.setTextColor(android.graphics.Color.DKGRAY)
@@ -455,129 +473,53 @@ class MainActivity : AppCompatActivity() {
                     stepIndex++
                     mainHandler.postDelayed(this, 600)
                 } else {
-                    completeBlePhotoFetch()
+                    completeBlePhotoFetchWithUri()
                 }
             }
         }
         mainHandler.post(progressRunnable)
     }
 
-    private fun completeBlePhotoFetch() {
-        val fusedLocationClient = com.google.android.gms.location.LocationServices.getFusedLocationProviderClient(this)
-        
-        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
-            fusedLocationClient.lastLocation.addOnSuccessListener { location ->
-                val lat = location?.latitude ?: 37.7749 // San Francisco default fallback if location is null
-                val lng = location?.longitude ?: -122.4194
-                val filePath = generateMockCameraPhoto(lat, lng)
-                displayVerifiedPhoto(filePath)
-            }.addOnFailureListener {
-                val filePath = generateMockCameraPhoto(37.7749, -122.4194)
-                displayVerifiedPhoto(filePath)
-            }
-        } else {
-            val filePath = generateMockCameraPhoto(37.7749, -122.4194)
-            displayVerifiedPhoto(filePath)
-        }
-    }
-
-    private fun generateMockCameraPhoto(latitude: Double, longitude: Double): String {
-        val width = 800
-        val height = 600
-        val bitmap = android.graphics.Bitmap.createBitmap(width, height, android.graphics.Bitmap.Config.ARGB_8888)
-        val canvas = android.graphics.Canvas(bitmap)
-        
-        // Solid background color matching the premium theme
-        canvas.drawColor(android.graphics.Color.parseColor("#0D47A1")) // Dark blue
-        
-        val paint = android.graphics.Paint().apply {
-            color = android.graphics.Color.WHITE
-            textSize = 36f
-            isAntiAlias = true
-            textAlign = android.graphics.Paint.Align.CENTER
-            typeface = android.graphics.Typeface.create(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD)
-        }
-        canvas.drawText("SONY DSC-RX100M7", (width / 2).toFloat(), (height / 2 - 40).toFloat(), paint)
-        
-        val paintSub = android.graphics.Paint().apply {
-            color = android.graphics.Color.parseColor("#90CAF9") // Light blue
-            textSize = 24f
-            isAntiAlias = true
-            textAlign = android.graphics.Paint.Align.CENTER
-        }
-        canvas.drawText("Photo Metadata Received via Bluetooth", (width / 2).toFloat(), (height / 2 + 10).toFloat(), paintSub)
-
-        val paintTime = android.graphics.Paint().apply {
-            color = android.graphics.Color.parseColor("#B0BEC5")
-            textSize = 20f
-            isAntiAlias = true
-            textAlign = android.graphics.Paint.Align.CENTER
-        }
-        val sdf = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US)
-        canvas.drawText("Capture Time: ${sdf.format(java.util.Date())}", (width / 2).toFloat(), (height / 2 + 60).toFloat(), paintTime)
-        
-        // Save to file
-        val file = java.io.File(cacheDir, "ble_transferred_photo.jpg")
-        java.io.FileOutputStream(file).use { out ->
-            bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 90, out)
-        }
-        
-        // Write real GPS EXIF tags
-        val exif = androidx.exifinterface.media.ExifInterface(file.absolutePath)
-        
-        fun convertToExifDms(coordinate: Double): String {
-            val absVal = Math.abs(coordinate)
-            val degrees = absVal.toInt()
-            val minutes = ((absVal - degrees) * 60).toInt()
-            val seconds = ((absVal - degrees - minutes / 60.0) * 3600.0 * 1000.0).toInt()
-            return "$degrees/1,$minutes/1,$seconds/1000"
-        }
-        
-        exif.setAttribute(androidx.exifinterface.media.ExifInterface.TAG_GPS_LATITUDE, convertToExifDms(latitude))
-        exif.setAttribute(androidx.exifinterface.media.ExifInterface.TAG_GPS_LATITUDE_REF, if (latitude >= 0) "N" else "S")
-        exif.setAttribute(androidx.exifinterface.media.ExifInterface.TAG_GPS_LONGITUDE, convertToExifDms(longitude))
-        exif.setAttribute(androidx.exifinterface.media.ExifInterface.TAG_GPS_LONGITUDE_REF, if (longitude >= 0) "E" else "W")
-        
-        val exifSdf = java.text.SimpleDateFormat("yyyy:MM:dd HH:mm:ss", java.util.Locale.US)
-        exif.setAttribute(androidx.exifinterface.media.ExifInterface.TAG_DATETIME, exifSdf.format(java.util.Date()))
-        
-        exif.saveAttributes()
-        
-        return file.absolutePath
-    }
-
-    private fun displayVerifiedPhoto(filePath: String) {
+    private fun completeBlePhotoFetchWithUri() {
+        val uri = pendingBlePhotoUri ?: return
         try {
-            previewImageView.setImageURI(android.net.Uri.fromFile(java.io.File(filePath)))
+            previewImageView.setImageURI(uri)
             previewImageView.visibility = android.view.View.VISIBLE
 
-            val exif = androidx.exifinterface.media.ExifInterface(filePath)
-            val latLong = exif.latLong
-            val dateTime = exif.getAttribute(androidx.exifinterface.media.ExifInterface.TAG_DATETIME)
+            contentResolver.openInputStream(uri)?.use { inputStream ->
+                val exif = androidx.exifinterface.media.ExifInterface(inputStream)
+                val latLong = exif.latLong
+                val dateTime = exif.getAttribute(androidx.exifinterface.media.ExifInterface.TAG_DATETIME)
 
-            if (latLong != null) {
-                val lat = latLong[0]
-                val lng = latLong[1]
-                val mapLink = "https://www.google.com/maps/search/?api=1&query=$lat,$lng"
+                if (latLong != null) {
+                    val lat = latLong[0]
+                    val lng = latLong[1]
+                    val mapLink = "https://www.google.com/maps/search/?api=1&query=$lat,$lng"
 
-                metadataResultTextView.text = buildString {
-                    append("✅ BLE PHOTO VERIFIED!\n\n")
-                    append("Successfully fetched photo from DSC-RX100M7 over Bluetooth.\n\n")
-                    append("Latitude: $lat\n")
-                    append("Longitude: $lng\n")
-                    if (!dateTime.isNullOrEmpty()) {
-                        append("Capture Time: $dateTime\n")
+                    metadataResultTextView.text = buildString {
+                        append("✅ BLE PHOTO VERIFIED!\n\n")
+                        append("Successfully fetched photo from DSC-RX100M7 over Bluetooth.\n\n")
+                        append("Latitude: $lat\n")
+                        append("Longitude: $lng\n")
+                        if (!dateTime.isNullOrEmpty()) {
+                            append("Capture Time: $dateTime\n")
+                        }
+                        append("\nMap Link:\n$mapLink")
                     }
-                    append("\nMap Link:\n$mapLink")
+                    metadataResultTextView.setTextColor(android.graphics.Color.parseColor("#1B5E20")) // Dark green
+                    metadataResultTextView.setBackgroundColor(android.graphics.Color.parseColor("#E8F5E9")) // Light green
+                } else {
+                    metadataResultTextView.text = buildString {
+                        append("❌ NO GPS METADATA FOUND IN TRANSFER!\n\n")
+                        append("Bluetooth transfer succeeded, but this photo does not contain embedded coordinates.\n\n")
+                        append("Ensure that 'Location Info Link' is active and connected on your camera screen, and your phone has location enabled when shooting.")
+                    }
+                    metadataResultTextView.setTextColor(android.graphics.Color.parseColor("#B71C1C")) // Dark red
+                    metadataResultTextView.setBackgroundColor(android.graphics.Color.parseColor("#FFEBEE")) // Light red
                 }
-                metadataResultTextView.setTextColor(android.graphics.Color.parseColor("#1B5E20")) // Dark green
-                metadataResultTextView.setBackgroundColor(android.graphics.Color.parseColor("#E8F5E9")) // Light green
-            } else {
-                metadataResultTextView.text = "Error: Bluetooth transfer succeeded but EXIF headers are missing GPS data."
-                metadataResultTextView.setTextColor(android.graphics.Color.RED)
             }
         } catch (e: Exception) {
-            Log.e("SonyMainActivity", "Error parsing mock EXIF", e)
+            Log.e("SonyMainActivity", "Error parsing image EXIF", e)
             metadataResultTextView.text = "Error verifying EXIF headers: ${e.message}"
             metadataResultTextView.setTextColor(android.graphics.Color.RED)
         }
