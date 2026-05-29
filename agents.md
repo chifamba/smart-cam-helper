@@ -51,8 +51,17 @@ The development of this application followed a rigorous, multi-stage refactoring
     *   **Tapjacking Overlay Protection**: Enabled `filterTouchesWhenObscured = true` on the root layout container.
     *   **MAC Address Masking**: Obfuscated hardware addresses inside active debug log outputs.
     *   **Local Broadcast Enforcement**: Restricted `BootReceiver` triggers to callers holding system-boot permissions.
-    *   **Encrypted Data-at-Rest**: Implemented custom XOR/Base64 cryptographic functions to encrypt camera MAC addresses stored in `SharedPreferences`.
+    *   **Encrypted Data-at-Rest**: Introduced `CryptoManager.kt` — a dedicated AES-256-GCM encryption module backed by the Android Keystore system — to encrypt camera MAC addresses written to `SharedPreferences`. A legacy XOR/Base64 fallback handles migration of any previously stored values.
     *   **Backup Block**: Set `android:allowBackup="false"` to prevent data extractions via local ADB backups.
+
+### 📍 Phase 6: Feature Expansion — Wi-Fi Photo Verification
+*   **Action**: Extended the app with a second major feature: real-time GPS metadata verification for photos taken with the camera.
+*   **Features Added**:
+    *   **Wi-Fi Camera Browser**: Connects directly to the Sony camera's built-in HTTP server (port 8080) using the Sony Smart Remote API (`/sony/avContent → getContentList`). Dynamically detects the camera's IP via DHCP gateway lookup.
+    *   **Direct Photo Download**: Downloads the selected photo directly from the camera's SD card over Wi-Fi and caches it locally for EXIF inspection.
+    *   **EXIF GPS Verification**: Uses `androidx.exifinterface` to extract embedded latitude, longitude, and capture timestamp from the downloaded photo. Displays a Google Maps deep-link on success.
+    *   **Local Gallery Inspector**: Allows users to select any photo from the local gallery (via MediaStore) and inspect its GPS EXIF tags. Filters the gallery for Sony-branded photos using the EXIF `Make` tag.
+    *   **Error Recovery Dialogs**: Integrated retry dialogs for all Wi-Fi error paths (camera unreachable, no photos on SD, HTTP server error, download failure).
 
 ---
 
