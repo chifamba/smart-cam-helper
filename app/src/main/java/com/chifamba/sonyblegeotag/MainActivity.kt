@@ -312,34 +312,251 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun loadPhotoThumbnail(uri: android.net.Uri): android.graphics.Bitmap? {
+        return try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                contentResolver.loadThumbnail(uri, android.util.Size(150, 150), null)
+            } else {
+                contentResolver.openInputStream(uri)?.use { inputStream ->
+                    val options = android.graphics.BitmapFactory.Options().apply {
+                        inSampleSize = 4 
+                    }
+                    android.graphics.BitmapFactory.decodeStream(inputStream, null, options)
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("SonyMainActivity", "Error loading thumbnail for $uri", e)
+            null
+        }
+    }
+
+    private fun queryRecentSonyPhotos(): List<Pair<android.net.Uri, String>> {
+        val photosList = mutableListOf<Pair<android.net.Uri, String>>()
+        val projection = arrayOf(
+            android.provider.MediaStore.Images.Media._ID,
+            android.provider.MediaStore.Images.Media.DISPLAY_NAME,
+            android.provider.MediaStore.Images.Media.DATE_ADDED
+        )
+        val sortOrder = "${android.provider.MediaStore.Images.Media.DATE_ADDED} DESC"
+        
+        try {
+            val cursor = contentResolver.query(
+                android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                projection,
+                null,
+                null,
+                sortOrder
+            )
+
+            cursor?.use {
+                var count = 0
+                while (it.moveToNext() && count < 30) { 
+                    val idColumn = it.getColumnIndexOrThrow(android.provider.MediaStore.Images.Media._ID)
+                    val nameColumn = it.getColumnIndexOrThrow(android.provider.MediaStore.Images.Media.DISPLAY_NAME)
+                    val id = it.getLong(idColumn)
+                    val name = it.getString(nameColumn) ?: "DSC_Photo_$id.jpg"
+                    
+                    val contentUri = android.content.ContentUris.withAppendedId(
+                        android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                        id
+                    )
+                    
+                    var isSony = false
+                    try {
+                        contentResolver.openInputStream(contentUri)?.use { inputStream ->
+                            val exif = androidx.exifinterface.media.ExifInterface(inputStream)
+                            val make = exif.getAttribute(androidx.exifinterface.media.ExifInterface.TAG_MAKE)
+                            if (!make.isNullOrEmpty() && make.contains("Sony", ignoreCase = true)) {
+                                isSony = true
+                            }
+                        }
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Error checking EXIF make for list", e)
+                    }
+                    
+                    if (isSony) {
+                        photosList.add(Pair(contentUri, name))
+                    }
+                    count++
+                }
+                
+                if (photosList.isEmpty()) {
+                    it.moveToPosition(-1) 
+                    var fallbackCount = 0
+                    while (it.moveToNext() && fallbackCount < 10) {
+                        val idColumn = it.getColumnIndexOrThrow(android.provider.MediaStore.Images.Media._ID)
+                        val nameColumn = it.getColumnIndexOrThrow(android.provider.MediaStore.Images.Media.DISPLAY_NAME)
+                        val id = it.getLong(idColumn)
+                        val name = it.getString(nameColumn) ?: "Photo_$id.jpg"
+                        val contentUri = android.content.ContentUris.withAppendedId(
+                            android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                            id
+                        )
+                        photosList.add(Pair(contentUri, "$name (Non-Sony fallback)"))
+                        fallbackCount++
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error querying MediaStore for list", e)
+        }
+        return photosList
+    }
+
+    private fun showPhotoSelectionDialog(photos: List<Pair<android.net.Uri, String>>) {
+        val builder = androidx.appcompat.app.AlertDialog.Builder(this)
+        
+        val titleView = TextView(this).apply {
+            text = "Select Photo to Verify GPS"
+            textSize = 20f
+            setPadding(40, 40, 40, 20)
+            setTextColor(android.graphics.Color.BLACK)
+            setTypeface(null, android.graphics.Typeface.BOLD)
+        }
+        builder.setCustomTitle(titleView)
+
+        val scrollView = android.widget.ScrollView(this)
+        val listContainer = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            setPadding(20, 10, 20, 20)
+        }
+        scrollView.addView(listContainer)
+
+        val dialog = builder.setView(scrollView)
+            .setNegativeButton("Cancel") { d, _ -> d.dismiss() }
+            .create()
+
+        for (photo in photos) {
+            val uri = photo.first
+            val filename = photo.second
+            
+            val row = android.widget.LinearLayout(this).apply {
+                orientation = android.widget.LinearLayout.HORIZONTAL
+                setPadding(20, 24, 20, 24)
+                gravity = android.view.Gravity.CENTER_VERTICAL
+                isClickable = true
+                focusable = android.view.View.FOCUSABLE
+                
+                val outValue = android.util.TypedValue()
+                theme.resolveAttribute(android.R.attr.selectableItemBackground, outValue, true)
+                setBackgroundResource(outValue.resourceId)
+            }
+
+            val thumbView = android.widget.ImageView(this).apply {
+                layoutParams = android.widget.LinearLayout.LayoutParams(120, 120).apply {
+                    setMargins(0, 0, 30, 0)
+                }
+                scaleType = android.widget.ImageView.ScaleType.CENTER_CROP
+                Thread {
+                    val bmp = loadPhotoThumbnail(uri)
+                    mainHandler.post {
+                        if (bmp != null) {
+                            setImageBitmap(bmp)
+                        } else {
+                            setImageResource(android.R.drawable.ic_menu_gallery)
+                        }
+                    }
+                }.start()
+            }
+            row.addView(thumbView)
+
+            val textLayout = android.widget.LinearLayout(this).apply {
+                orientation = android.widget.LinearLayout.VERTICAL
+                layoutParams = android.widget.LinearLayout.LayoutParams(
+                    android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+                    android.widget.LinearLayout.LayoutParams.WRAP_CONTENT
+                )
+            }
+
+            val nameView = TextView(this).apply {
+                text = filename
+                textSize = 15f
+                setTextColor(android.graphics.Color.BLACK)
+                setTypeface(null, android.graphics.Typeface.BOLD)
+                ellipsize = android.text.TextUtils.TruncateAt.END
+                maxLines = 1
+            }
+            textLayout.addView(nameView)
+
+            val detailView = TextView(this).apply {
+                textSize = 12f
+                setTextColor(android.graphics.Color.GRAY)
+                text = "Tap to fetch and inspect GPS EXIF tags"
+                
+                Thread {
+                    var captureDate = ""
+                    try {
+                        contentResolver.openInputStream(uri)?.use { inputStream ->
+                            val exif = androidx.exifinterface.media.ExifInterface(inputStream)
+                            val dateTime = exif.getAttribute(androidx.exifinterface.media.ExifInterface.TAG_DATETIME)
+                            if (!dateTime.isNullOrEmpty()) {
+                                captureDate = "Captured: $dateTime"
+                            }
+                        }
+                    } catch (e: Exception) {}
+                    mainHandler.post {
+                        if (captureDate.isNotEmpty()) {
+                            text = captureDate
+                        }
+                    }
+                }.start()
+            }
+            textLayout.addView(detailView)
+            
+            row.addView(textLayout)
+
+            row.setOnClickListener {
+                dialog.dismiss()
+                
+                val cachedFile = cacheSelectedPhoto(uri)
+                if (cachedFile != null) {
+                    pendingBlePhotoFile = cachedFile
+                    startBlePhotoTransferSimulation()
+                } else {
+                    Toast.makeText(this@MainActivity, "Failed to load selected photo", Toast.LENGTH_SHORT).show()
+                }
+            }
+
+            listContainer.addView(row)
+
+            val itemDivider = android.view.View(this).apply {
+                layoutParams = android.widget.LinearLayout.LayoutParams(
+                    android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+                    2
+                )
+                setBackgroundColor(android.graphics.Color.parseColor("#E0E0E0"))
+            }
+            listContainer.addView(itemDivider)
+        }
+
+        dialog.show()
+    }
+
     private fun scanAndFetchLatestPhoto() {
-        metadataResultTextView.text = "🔍 Scanning local storage for latest Sony photo..."
+        metadataResultTextView.text = "🔍 Scanning local storage for Sony photos..."
         metadataResultTextView.setTextColor(android.graphics.Color.DKGRAY)
         metadataResultTextView.setBackgroundColor(android.graphics.Color.parseColor("#F5F5F5"))
         previewImageView.visibility = android.view.View.GONE
 
-        val uri = findLatestSonyPhotoUri()
-        if (uri != null) {
-            val cachedFile = cacheSelectedPhoto(uri)
-            if (cachedFile != null) {
-                pendingBlePhotoFile = cachedFile
-                startBlePhotoTransferSimulation()
-            } else {
-                metadataResultTextView.text = "❌ Error: Failed to read photo file from storage."
-                metadataResultTextView.setTextColor(android.graphics.Color.RED)
+        Thread {
+            val photos = queryRecentSonyPhotos()
+            mainHandler.post {
+                if (photos.isNotEmpty()) {
+                    showPhotoSelectionDialog(photos)
+                } else {
+                    metadataResultTextView.text = buildString {
+                        append("⚠️ NO SONY PHOTOS DETECTED!\n\n")
+                        append("Could not find any photos from a Sony camera in your device's gallery.\n\n")
+                        append("Please make sure:\n")
+                        append("1. You have captured photos on your Sony camera.\n")
+                        append("2. You have transferred them to your phone using Imaging Edge Mobile or Creators' App.\n\n")
+                        append("You can also use 'Select Local Photo to Verify GPS' to test a photo manually.")
+                    }
+                    metadataResultTextView.setTextColor(android.graphics.Color.parseColor("#E65100")) 
+                    metadataResultTextView.setBackgroundColor(android.graphics.Color.parseColor("#FFF3E0")) 
+                }
             }
-        } else {
-            metadataResultTextView.text = buildString {
-                append("⚠️ NO PHOTO DETECTED IN GALLERY!\n\n")
-                append("Could not find any photos in your device's gallery storage.\n\n")
-                append("Please make sure:\n")
-                append("1. You have captured a photo on your Sony camera.\n")
-                append("2. You have transferred it to your phone using Imaging Edge Mobile or Creators' App.\n\n")
-                append("You can also use 'Select Local Photo to Verify GPS' to test a photo manually.")
-            }
-            metadataResultTextView.setTextColor(android.graphics.Color.parseColor("#E65100")) // Orange-dark
-            metadataResultTextView.setBackgroundColor(android.graphics.Color.parseColor("#FFF3E0")) // Orange-light
-        }
+        }.start()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
