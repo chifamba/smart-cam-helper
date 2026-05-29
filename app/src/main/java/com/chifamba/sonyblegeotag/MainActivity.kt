@@ -786,7 +786,7 @@ class MainActivity : AppCompatActivity() {
 
         val fetchBlePhotoButton = Button(this).apply {
             text = "Fetch & Verify Latest Photo via Wi-Fi"
-            setOnClickListener { fetchAndVerifyLatestPhotoViaBle() }
+            setOnClickListener { fetchAndVerifyLatestPhotoViaWifi() }
         }
         container.addView(fetchBlePhotoButton)
 
@@ -1087,7 +1087,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun fetchAndVerifyLatestPhotoViaBle() {
+    private fun fetchAndVerifyLatestPhotoViaWifi() {
         val address = discoveredDeviceAddress
         if (address.isNullOrEmpty()) {
             Toast.makeText(this, "No Sony camera connected. Pair and connect a camera first.", Toast.LENGTH_LONG).show()
