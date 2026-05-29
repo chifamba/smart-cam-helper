@@ -41,15 +41,74 @@ class MainActivity : AppCompatActivity() {
     private lateinit var startServiceButton: Button
     private lateinit var stopServiceButton: Button
 
+    private lateinit var previewImageView: android.widget.ImageView
+    private lateinit var metadataResultTextView: TextView
+
+    private val selectImageLauncher = registerForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri ->
+        if (uri != null) {
+            try {
+                previewImageView.setImageURI(uri)
+                previewImageView.visibility = android.view.View.VISIBLE
+
+                contentResolver.openInputStream(uri)?.use { inputStream ->
+                    val exif = androidx.exifinterface.media.ExifInterface(inputStream)
+                    val latLong = exif.latLong
+                    val dateTime = exif.getAttribute(androidx.exifinterface.media.ExifInterface.TAG_DATETIME)
+
+                    if (latLong != null) {
+                        val lat = latLong[0]
+                        val lng = latLong[1]
+                        val mapLink = "https://www.google.com/maps/search/?api=1&query=$lat,$lng"
+                        
+                        metadataResultTextView.text = buildString {
+                            append("✅ GPS METADATA FOUND!\n\n")
+                            append("Latitude: $lat\n")
+                            append("Longitude: $lng\n")
+                            if (!dateTime.isNullOrEmpty()) {
+                                append("Date/Time: $dateTime\n")
+                            }
+                            append("\nMap Link:\n$mapLink")
+                        }
+                        metadataResultTextView.setTextColor(android.graphics.Color.parseColor("#1B5E20")) // Dark green
+                        metadataResultTextView.setBackgroundColor(android.graphics.Color.parseColor("#E8F5E9")) // Light green
+                    } else {
+                        metadataResultTextView.text = buildString {
+                            append("❌ NO GPS METADATA FOUND!\n\n")
+                            append("This photo does not contain embedded location coordinates.\n\n")
+                            append("Ensure that 'Location Info Link' is active and connected on your camera screen, and your phone has location enabled when shooting.")
+                        }
+                        metadataResultTextView.setTextColor(android.graphics.Color.parseColor("#B71C1C")) // Dark red
+                        metadataResultTextView.setBackgroundColor(android.graphics.Color.parseColor("#FFEBEE")) // Light red
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("SonyMainActivity", "Error parsing image EXIF", e)
+                metadataResultTextView.text = "Error parsing photo metadata: ${e.message}"
+                metadataResultTextView.setTextColor(android.graphics.Color.RED)
+            }
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
+        val scrollView = android.widget.ScrollView(this).apply {
+            layoutParams = android.view.ViewGroup.LayoutParams(
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT
+            )
+            isFillViewport = true
+        }
+
         // Layout structure instantiated directly
         val container = android.widget.LinearLayout(this).apply {
             orientation = android.widget.LinearLayout.VERTICAL
             setPadding(40, 60, 40, 40)
             filterTouchesWhenObscured = true // Mitigate tapjacking overlay attacks
         }
+        scrollView.addView(container)
 
         val titleView = TextView(this).apply {
             text = "Sony Camera BLE Geotagger"
@@ -87,7 +146,54 @@ class MainActivity : AppCompatActivity() {
         }
         container.addView(stopServiceButton)
 
-        setContentView(container)
+        // Divider line
+        val divider = android.view.View(this).apply {
+            layoutParams = android.widget.LinearLayout.LayoutParams(
+                android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+                4
+            ).apply {
+                setMargins(0, 60, 0, 60)
+            }
+            setBackgroundColor(android.graphics.Color.LTGRAY)
+        }
+        container.addView(divider)
+
+        val metadataTitle = TextView(this).apply {
+            text = "Verify Photo GPS Metadata"
+            textSize = 20f
+            setTypeface(null, android.graphics.Typeface.BOLD)
+            setPadding(0, 0, 0, 24)
+        }
+        container.addView(metadataTitle)
+
+        val selectImageButton = Button(this).apply {
+            text = "Select Photo to Verify GPS"
+            setOnClickListener { selectImageLauncher.launch("image/*") }
+        }
+        container.addView(selectImageButton)
+
+        previewImageView = android.widget.ImageView(this).apply {
+            layoutParams = android.widget.LinearLayout.LayoutParams(
+                android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+                500
+            ).apply {
+                setMargins(0, 32, 0, 32)
+            }
+            scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
+            visibility = android.view.View.GONE
+        }
+        container.addView(previewImageView)
+
+        metadataResultTextView = TextView(this).apply {
+            text = "No photo selected. Import a photo transferred from your camera to inspect its EXIF tags."
+            textSize = 14f
+            setPadding(24, 32, 24, 32)
+            setBackgroundColor(android.graphics.Color.parseColor("#F5F5F5"))
+            setTextColor(android.graphics.Color.DKGRAY)
+        }
+        container.addView(metadataResultTextView)
+
+        setContentView(scrollView)
 
         val bluetoothManager = getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
         bluetoothAdapter = bluetoothManager.adapter
