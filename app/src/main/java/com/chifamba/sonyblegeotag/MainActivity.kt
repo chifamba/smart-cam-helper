@@ -122,6 +122,117 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private val storagePermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            scanAndFetchLatestPhoto()
+        } else {
+            metadataResultTextView.text = "❌ Error: Storage permission denied.\n\nPlease enable storage permissions in Settings to fetch and verify photos from your gallery."
+            metadataResultTextView.setTextColor(android.graphics.Color.RED)
+            metadataResultTextView.setBackgroundColor(android.graphics.Color.parseColor("#FFEBEE"))
+        }
+    }
+
+    private fun checkStoragePermissionGranted(): Boolean {
+        val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            Manifest.permission.READ_MEDIA_IMAGES
+        } else {
+            Manifest.permission.READ_EXTERNAL_STORAGE
+        }
+        return ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED
+    }
+
+    private fun findLatestSonyPhotoUri(): android.net.Uri? {
+        val projection = arrayOf(
+            android.provider.MediaStore.Images.Media._ID,
+            android.provider.MediaStore.Images.Media.DISPLAY_NAME
+        )
+        val sortOrder = "${android.provider.MediaStore.Images.Media.DATE_ADDED} DESC"
+        
+        return try {
+            val cursor = contentResolver.query(
+                android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                projection,
+                null,
+                null,
+                sortOrder
+            )
+
+            cursor?.use {
+                var count = 0
+                while (it.moveToNext() && count < 50) {
+                    val idColumn = it.getColumnIndexOrThrow(android.provider.MediaStore.Images.Media._ID)
+                    val id = it.getLong(idColumn)
+                    val contentUri = android.content.ContentUris.withAppendedId(
+                        android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                        id
+                    )
+                    
+                    try {
+                        contentResolver.openInputStream(contentUri)?.use { inputStream ->
+                            val exif = androidx.exifinterface.media.ExifInterface(inputStream)
+                            val make = exif.getAttribute(androidx.exifinterface.media.ExifInterface.TAG_MAKE)
+                            if (!make.isNullOrEmpty() && make.contains("Sony", ignoreCase = true)) {
+                                Log.d(TAG, "Found Sony camera photo: $contentUri")
+                                return contentUri
+                            }
+                        }
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Error checking EXIF for $contentUri", e)
+                    }
+                    count++
+                }
+                
+                // Fallback to absolute newest photo in the gallery if no Sony photo is found
+                if (it.moveToFirst()) {
+                    val idColumn = it.getColumnIndexOrThrow(android.provider.MediaStore.Images.Media._ID)
+                    val id = it.getLong(idColumn)
+                    val contentUri = android.content.ContentUris.withAppendedId(
+                        android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                        id
+                    )
+                    Log.d(TAG, "No Sony photo found. Falling back to newest gallery photo: $contentUri")
+                    return contentUri
+                }
+            }
+            null
+        } catch (e: Exception) {
+            Log.e(TAG, "Error querying MediaStore", e)
+            null
+        }
+    }
+
+    private fun scanAndFetchLatestPhoto() {
+        metadataResultTextView.text = "🔍 Scanning local storage for latest Sony photo..."
+        metadataResultTextView.setTextColor(android.graphics.Color.DKGRAY)
+        metadataResultTextView.setBackgroundColor(android.graphics.Color.parseColor("#F5F5F5"))
+        previewImageView.visibility = android.view.View.GONE
+
+        val uri = findLatestSonyPhotoUri()
+        if (uri != null) {
+            val cachedFile = cacheSelectedPhoto(uri)
+            if (cachedFile != null) {
+                pendingBlePhotoFile = cachedFile
+                startBlePhotoTransferSimulation()
+            } else {
+                metadataResultTextView.text = "❌ Error: Failed to read photo file from storage."
+                metadataResultTextView.setTextColor(android.graphics.Color.RED)
+            }
+        } else {
+            metadataResultTextView.text = buildString {
+                append("⚠️ NO PHOTO DETECTED IN GALLERY!\n\n")
+                append("Could not find any photos in your device's gallery storage.\n\n")
+                append("Please make sure:\n")
+                append("1. You have captured a photo on your Sony camera.\n")
+                append("2. You have transferred it to your phone using Imaging Edge Mobile or Creators' App.\n\n")
+                append("You can also use 'Select Local Photo to Verify GPS' to test a photo manually.")
+            }
+            metadataResultTextView.setTextColor(android.graphics.Color.parseColor("#E65100")) // Orange-dark
+            metadataResultTextView.setBackgroundColor(android.graphics.Color.parseColor("#FFF3E0")) // Orange-light
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
@@ -251,6 +362,9 @@ class MainActivity : AppCompatActivity() {
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             permissionsToRequest.add(Manifest.permission.POST_NOTIFICATIONS)
+            permissionsToRequest.add(Manifest.permission.READ_MEDIA_IMAGES)
+        } else {
+            permissionsToRequest.add(Manifest.permission.READ_EXTERNAL_STORAGE)
         }
 
         val ungranted = permissionsToRequest.filter {
@@ -460,8 +574,16 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
-        // Let the user select the actual photo they took on the camera
-        selectBlePhotoLauncher.launch("image/*")
+        if (checkStoragePermissionGranted()) {
+            scanAndFetchLatestPhoto()
+        } else {
+            val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                Manifest.permission.READ_MEDIA_IMAGES
+            } else {
+                Manifest.permission.READ_EXTERNAL_STORAGE
+            }
+            storagePermissionLauncher.launch(permission)
+        }
     }
 
     private fun startBlePhotoTransferSimulation() {
