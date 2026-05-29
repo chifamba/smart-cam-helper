@@ -527,15 +527,37 @@ class MainActivity : AppCompatActivity() {
         dialog.show()
     }
 
+    private fun getCameraIpAddress(): String {
+        return try {
+            val wifiManager = applicationContext.getSystemService(Context.WIFI_SERVICE) as android.net.wifi.WifiManager
+            val dhcp = wifiManager.dhcpInfo
+            val gateway = dhcp.gateway
+            if (gateway != 0) {
+                val ip = (gateway and 0xFF).toString() + "." +
+                        (gateway shr 8 and 0xFF).toString() + "." +
+                        (gateway shr 16 and 0xFF).toString() + "." +
+                        (gateway shr 24 and 0xFF).toString()
+                Log.d(TAG, "Detected active Wi-Fi DHCP Gateway (Camera IP): $ip")
+                ip
+            } else {
+                "192.168.122.1"
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to resolve DHCP Gateway IP, using default fallback.", e)
+            "192.168.122.1"
+        }
+    }
+
     private fun fetchCameraContentOverWifi() {
-        metadataResultTextView.text = "📡 Connecting to Sony Camera Web Server via Wi-Fi...\nTarget: http://192.168.122.1:8080"
+        val cameraIp = getCameraIpAddress()
+        metadataResultTextView.text = "📡 Connecting to Sony Camera Web Server via Wi-Fi...\nTarget: http://$cameraIp:8080"
         metadataResultTextView.setTextColor(android.graphics.Color.DKGRAY)
         metadataResultTextView.setBackgroundColor(android.graphics.Color.parseColor("#F5F5F5"))
         previewImageView.visibility = android.view.View.GONE
 
         Thread {
             try {
-                val url = java.net.URL("http://192.168.122.1:8080/sony/avContent")
+                val url = java.net.URL("http://$cameraIp:8080/sony/avContent")
                 val conn = url.openConnection() as java.net.HttpURLConnection
                 conn.requestMethod = "POST"
                 conn.connectTimeout = 3000
@@ -1249,9 +1271,9 @@ class MainActivity : AppCompatActivity() {
     private fun getAppVersion(): String {
         return try {
             val pInfo = packageManager.getPackageInfo(packageName, 0)
-            pInfo.versionName ?: "1.2"
+            pInfo.versionName ?: "1.3"
         } catch (e: Exception) {
-            "1.2"
+            "1.3"
         }
     }
 }
