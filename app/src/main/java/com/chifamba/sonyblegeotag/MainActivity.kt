@@ -494,7 +494,7 @@ class MainActivity : AppCompatActivity() {
                 val cachedFile = cacheSelectedPhoto(uri)
                 if (cachedFile != null) {
                     pendingBlePhotoFile = cachedFile
-                    startBlePhotoTransferSimulation()
+                    verifyDownloadedPhotoExif()
                 } else {
                     Toast.makeText(this@MainActivity, "Failed to load selected photo", Toast.LENGTH_SHORT).show()
                 }
@@ -1260,10 +1260,6 @@ class MainActivity : AppCompatActivity() {
         metadataResultTextView.setBackgroundColor(android.graphics.Color.parseColor("#F5F5F5"))
         previewImageView.visibility = android.view.View.GONE
         completeBlePhotoFetchWithUri()
-    }
-
-    private fun startBlePhotoTransferSimulation() {
-        verifyDownloadedPhotoExif()
     }
 
     private fun completeBlePhotoFetchWithUri() {
