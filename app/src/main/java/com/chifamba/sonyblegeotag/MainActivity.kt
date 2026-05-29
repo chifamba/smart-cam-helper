@@ -190,6 +190,9 @@ class MainActivity : AppCompatActivity() {
             startServiceButton.isEnabled = false
             stopServiceButton.isEnabled = true
             scanButton.isEnabled = true
+            
+            // Automatically launch service to sync background state
+            toggleService(true)
         } else {
             statusTextView.text = "Status: Ready to Scan."
             scanButton.isEnabled = true

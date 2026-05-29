@@ -27,7 +27,7 @@
         android:allowBackup="false"
         android:label="Sony Geotag Client"
         android:icon="@android:drawable/ic_menu_mylocation"
-        android:theme="@style/Theme.AppCompat.Light.DarkActionBar"
+        android:theme="@style/AppTheme"
         android:supportsRtl="true">
 
         <activity

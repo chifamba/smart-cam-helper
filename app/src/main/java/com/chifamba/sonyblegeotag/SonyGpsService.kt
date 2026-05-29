@@ -346,6 +346,8 @@ class SonyGpsService : Service() {
             characteristicWritePending = false
             if (status == BluetoothGatt.GATT_SUCCESS) {
                 Log.d(TAG, "Successfully wrote GPS coordinates to Sony camera!")
+            } else if (status == 144) {
+                Log.w(TAG, "GATT write failed with status=144 (0x90). This typically indicates a pairing/authentication issue, or that 'Location Info. Link' is turned OFF in your Sony Camera's Network settings.")
             } else {
                 Log.e(TAG, "GATT write failed with status=$status")
             }
@@ -385,12 +387,32 @@ class SonyGpsService : Service() {
             timestampMs = location.time
         )
 
-        characteristic.value = payload
-        characteristic.writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+        val writeType = if ((characteristic.properties and BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE) != 0) {
+            BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
+        } else {
+            BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+        }
+
+        Log.d(TAG, "Writing GPS payload using writeType: $writeType (properties: ${characteristic.properties})")
         characteristicWritePending = true
 
         try {
-            val success = gatt.writeCharacteristic(characteristic)
+            val success = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                val status = gatt.writeCharacteristic(
+                    characteristic,
+                    payload,
+                    writeType
+                )
+                status == android.bluetooth.BluetoothStatusCodes.SUCCESS
+            } else {
+                @Suppress("DEPRECATION")
+                characteristic.value = payload
+                @Suppress("DEPRECATION")
+                characteristic.writeType = writeType
+                @Suppress("DEPRECATION")
+                gatt.writeCharacteristic(characteristic)
+            }
+
             if (!success) {
                 Log.e(TAG, "GATT hardware write initiation failed")
                 characteristicWritePending = false
@@ -408,7 +430,12 @@ class SonyGpsService : Service() {
         override fun onReceive(context: Context, intent: Intent) {
             val action = intent.action
             if (BluetoothDevice.ACTION_BOND_STATE_CHANGED == action) {
-                val device = intent.getParcelableExtra<BluetoothDevice>(BluetoothDevice.EXTRA_DEVICE)
+                val device = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
+                } else {
+                    @Suppress("DEPRECATION")
+                    intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
+                }
                 val bondState = intent.getIntExtra(BluetoothDevice.EXTRA_BOND_STATE, BluetoothDevice.ERROR)
                 if (device?.address == targetDeviceAddress) {
                     when (bondState) {
