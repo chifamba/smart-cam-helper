@@ -578,8 +578,9 @@ class MainActivity : AppCompatActivity() {
         }
         scrollView.addView(container)
 
+        val appVersionName = getAppVersion()
         val titleView = TextView(this).apply {
-            text = "Sony Camera BLE Geotagger"
+            text = "Sony Camera BLE Geotagger v$appVersionName"
             textSize = 24f
             setTypeface(null, android.graphics.Typeface.BOLD)
             setPadding(0, 0, 0, 40)
@@ -988,6 +989,15 @@ class MainActivity : AppCompatActivity() {
             Log.e("SonyMainActivity", "Error parsing image EXIF", e)
             metadataResultTextView.text = "Error verifying EXIF headers: ${e.message}"
             metadataResultTextView.setTextColor(android.graphics.Color.RED)
+        }
+    }
+
+    private fun getAppVersion(): String {
+        return try {
+            val pInfo = packageManager.getPackageInfo(packageName, 0)
+            pInfo.versionName ?: "1.1"
+        } catch (e: Exception) {
+            "1.1"
         }
     }
 }
