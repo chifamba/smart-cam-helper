@@ -115,7 +115,7 @@ class MainActivity : AppCompatActivity() {
             val cachedFile = cacheSelectedPhoto(uri)
             if (cachedFile != null) {
                 pendingBlePhotoFile = cachedFile
-                startBlePhotoTransferSimulation()
+                verifyDownloadedPhotoExif()
             } else {
                 Toast.makeText(this, "Failed to read chosen photo", Toast.LENGTH_SHORT).show()
             }
@@ -228,11 +228,14 @@ class MainActivity : AppCompatActivity() {
             mainHandler.post {
                 if (success) {
                     pendingBlePhotoFile = tempFile
-                    startBlePhotoTransferSimulation()
+                    verifyDownloadedPhotoExif()
                 } else {
-                    Log.d(TAG, "Bluetooth RFCOMM transfer was not successful. Falling back to MediaStore gallery scanner...")
-                    Toast.makeText(this@MainActivity, "Bluetooth RFCOMM failed. Scanning phone gallery for latest synced Sony photo...", Toast.LENGTH_LONG).show()
-                    scanAndFetchLatestPhoto()
+                    Log.e(TAG, "Bluetooth RFCOMM transfer failed. Not falling back to phone gallery.")
+                    showCameraConnectionErrorDialog(
+                        "❌ Bluetooth Connection Failed",
+                        "Could not transfer a photo from the camera over Bluetooth.\n\nMake sure the camera is powered on, within range, and paired with this device.",
+                        { connectAndFetchPhotoOverBluetooth(deviceAddress) }
+                    )
                 }
             }
         }.start()
@@ -375,22 +378,7 @@ class MainActivity : AppCompatActivity() {
                     count++
                 }
                 
-                if (photosList.isEmpty()) {
-                    it.moveToPosition(-1) 
-                    var fallbackCount = 0
-                    while (it.moveToNext() && fallbackCount < 10) {
-                        val idColumn = it.getColumnIndexOrThrow(android.provider.MediaStore.Images.Media._ID)
-                        val nameColumn = it.getColumnIndexOrThrow(android.provider.MediaStore.Images.Media.DISPLAY_NAME)
-                        val id = it.getLong(idColumn)
-                        val name = it.getString(nameColumn) ?: "Photo_$id.jpg"
-                        val contentUri = android.content.ContentUris.withAppendedId(
-                            android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
-                            id
-                        )
-                        photosList.add(Pair(contentUri, "$name (Non-Sony fallback)"))
-                        fallbackCount++
-                    }
-                }
+                // No fallback: only real Sony camera photos are shown in the list.
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error querying MediaStore for list", e)
@@ -596,22 +584,33 @@ class MainActivity : AppCompatActivity() {
                         if (photoUrls.isNotEmpty()) {
                             showCameraPhotoSelectionDialog(photoUrls)
                         } else {
-                            Toast.makeText(this@MainActivity, "Connected to camera, but no photos were found on SD card.", Toast.LENGTH_LONG).show()
-                            scanAndFetchLatestPhoto() 
+                            Log.e(TAG, "Connected to camera but no photos found on SD card.")
+                            showCameraConnectionErrorDialog(
+                                "📷 No Photos on Camera",
+                                "Connected to the camera successfully, but no photos were found on the SD card.\n\nTake a photo on the camera and try again.",
+                                { fetchCameraContentOverWifi() }
+                            )
                         }
                     }
                 } else {
-                    Log.w(TAG, "HTTP Response Code: ${conn.responseCode}")
+                    val errorCode = conn.responseCode
+                    Log.e(TAG, "Camera HTTP Response Code: $errorCode")
                     mainHandler.post {
-                        Toast.makeText(this@MainActivity, "Camera web server returned error ${conn.responseCode}. Scanning local gallery instead...", Toast.LENGTH_LONG).show()
-                        scanAndFetchLatestPhoto()
+                        showCameraConnectionErrorDialog(
+                            "❌ Camera Server Error",
+                            "The camera's web server returned an unexpected error (HTTP $errorCode).\n\nMake sure the camera is in the correct mode and try again.",
+                            { fetchCameraContentOverWifi() }
+                        )
                     }
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Wi-Fi connection to camera failed", e)
                 mainHandler.post {
-                    Toast.makeText(this@MainActivity, "Camera Wi-Fi offline. Make sure you connect phone to camera Wi-Fi! Scanning local gallery...", Toast.LENGTH_LONG).show()
-                    scanAndFetchLatestPhoto()
+                    showCameraConnectionErrorDialog(
+                        "❌ Camera Wi-Fi Unreachable",
+                        "Could not connect to the camera's Wi-Fi network.\n\nPlease connect your phone to the camera's Wi-Fi hotspot and try again.",
+                        { fetchCameraContentOverWifi() }
+                    )
                 }
             }
         }.start()
@@ -694,11 +693,13 @@ class MainActivity : AppCompatActivity() {
             mainHandler.post {
                 if (success) {
                     pendingBlePhotoFile = tempFile
-                    startBlePhotoTransferSimulation()
+                    verifyDownloadedPhotoExif()
                 } else {
-                    metadataResultTextView.text = "❌ Error: Failed to download photo from Camera web server."
-                    metadataResultTextView.setTextColor(android.graphics.Color.RED)
-                    metadataResultTextView.setBackgroundColor(android.graphics.Color.parseColor("#FFEBEE"))
+                    showCameraConnectionErrorDialog(
+                        "❌ Download Failed",
+                        "Failed to download the selected photo from the camera over Wi-Fi.\n\nMake sure the camera is still connected and try again.",
+                        { downloadFullPhotoFromCameraUrl(photoUrl) }
+                    )
                 }
             }
         }.start()
@@ -806,6 +807,26 @@ class MainActivity : AppCompatActivity() {
         }
 
         dialog.show()
+    }
+
+    private fun showCameraConnectionErrorDialog(title: String, message: String, retryAction: () -> Unit) {
+        metadataResultTextView.text = "$title\n\n$message"
+        metadataResultTextView.setTextColor(android.graphics.Color.parseColor("#B71C1C"))
+        metadataResultTextView.setBackgroundColor(android.graphics.Color.parseColor("#FFEBEE"))
+        previewImageView.visibility = android.view.View.GONE
+
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle(title)
+            .setMessage(message)
+            .setPositiveButton("Try Again") { dialog, _ ->
+                dialog.dismiss()
+                retryAction()
+            }
+            .setNegativeButton("Cancel") { dialog, _ ->
+                dialog.dismiss()
+            }
+            .setCancelable(true)
+            .show()
     }
 
     private fun scanAndFetchLatestPhoto() {
@@ -1233,40 +1254,16 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun startBlePhotoTransferSimulation() {
-        // Show progressive transfer status
-        previewImageView.visibility = android.view.View.GONE
+    private fun verifyDownloadedPhotoExif() {
+        metadataResultTextView.text = "🔍 Verifying GPS metadata in downloaded photo..."
         metadataResultTextView.setTextColor(android.graphics.Color.DKGRAY)
         metadataResultTextView.setBackgroundColor(android.graphics.Color.parseColor("#F5F5F5"))
-        
-        val steps = arrayOf(
-            "Connecting to camera via Bluetooth BLE...",
-            "Requesting latest captured photo metadata...",
-            "Downloading image EXIF header block (182 bytes)...",
-            "Verifying data integrity and parsing tags..."
-        )
+        previewImageView.visibility = android.view.View.GONE
+        completeBlePhotoFetchWithUri()
+    }
 
-        var stepIndex = 0
-        val progressRunnable = object : Runnable {
-            override fun run() {
-                if (stepIndex < steps.size) {
-                    metadataResultTextView.text = buildString {
-                        append("📡 BLUETOOTH BLE TRANSFER ACTIVE\n\n")
-                        append("Status: ${steps[stepIndex]}\n")
-                        append("Progress: [")
-                        for (i in 0..3) {
-                            if (i <= stepIndex) append("■") else append("□")
-                        }
-                        append("] ${(stepIndex + 1) * 25}%")
-                    }
-                    stepIndex++
-                    mainHandler.postDelayed(this, 600)
-                } else {
-                    completeBlePhotoFetchWithUri()
-                }
-            }
-        }
-        mainHandler.post(progressRunnable)
+    private fun startBlePhotoTransferSimulation() {
+        verifyDownloadedPhotoExif()
     }
 
     private fun completeBlePhotoFetchWithUri() {
@@ -1285,8 +1282,8 @@ class MainActivity : AppCompatActivity() {
                 val mapLink = "https://www.google.com/maps/search/?api=1&query=$lat,$lng"
 
                 metadataResultTextView.text = buildString {
-                    append("✅ BLE PHOTO VERIFIED!\n\n")
-                    append("Successfully fetched photo from DSC-RX100M7 over Bluetooth.\n\n")
+                    append("✅ PHOTO GPS VERIFIED!\n\n")
+                    append("Successfully fetched and verified the photo from your Sony camera.\n\n")
                     append("Latitude: $lat\n")
                     append("Longitude: $lng\n")
                     if (!dateTime.isNullOrEmpty()) {
