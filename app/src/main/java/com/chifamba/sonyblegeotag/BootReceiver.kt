@@ -27,12 +27,16 @@ class BootReceiver : BroadcastReceiver() {
 
     private fun decryptString(value: String): String {
         return try {
-            val decoded = android.util.Base64.decode(value, android.util.Base64.NO_WRAP)
-            val key = 0x5F.toByte()
-            val decrypted = decoded.map { (it.toInt() xor key.toInt()).toByte() }.toByteArray()
-            String(decrypted)
+            CryptoManager.decrypt(value)
         } catch (e: Exception) {
-            ""
+            try {
+                val decoded = android.util.Base64.decode(value, android.util.Base64.NO_WRAP)
+                val key = 0x5F.toByte()
+                val decrypted = decoded.map { (it.toInt() xor key.toInt()).toByte() }.toByteArray()
+                String(decrypted)
+            } catch (ex: Exception) {
+                ""
+            }
         }
     }
 }
