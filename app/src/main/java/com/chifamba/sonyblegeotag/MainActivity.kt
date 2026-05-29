@@ -126,12 +126,121 @@ class MainActivity : AppCompatActivity() {
         ActivityResultContracts.RequestPermission()
     ) { granted ->
         if (granted) {
-            scanAndFetchLatestPhoto()
+            val address = discoveredDeviceAddress
+            if (!address.isNullOrEmpty()) {
+                connectAndFetchPhotoOverBluetooth(address)
+            } else {
+                scanAndFetchLatestPhoto()
+            }
         } else {
             metadataResultTextView.text = "❌ Error: Storage permission denied.\n\nPlease enable storage permissions in Settings to fetch and verify photos from your gallery."
             metadataResultTextView.setTextColor(android.graphics.Color.RED)
             metadataResultTextView.setBackgroundColor(android.graphics.Color.parseColor("#FFEBEE"))
         }
+    }
+
+    private fun connectAndFetchPhotoOverBluetooth(deviceAddress: String) {
+        metadataResultTextView.text = "📡 Connecting to camera via Bluetooth SPP/RFCOMM...\nAddress: $deviceAddress"
+        metadataResultTextView.setTextColor(android.graphics.Color.DKGRAY)
+        metadataResultTextView.setBackgroundColor(android.graphics.Color.parseColor("#F5F5F5"))
+        previewImageView.visibility = android.view.View.GONE
+
+        Thread {
+            var socket: android.bluetooth.BluetoothSocket? = null
+            var success = false
+            val tempFile = java.io.File(cacheDir, "ble_transferred_photo_temp.jpg")
+            
+            try {
+                val device = bluetoothAdapter?.getRemoteDevice(deviceAddress)
+                if (device != null) {
+                    val sppUuid = java.util.UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
+                    
+                    socket = if (ActivityCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED || Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+                        device.createRfcommSocketToServiceRecord(sppUuid)
+                    } else {
+                        null
+                    }
+                    
+                    if (socket != null) {
+                        Log.d(TAG, "Attempting Bluetooth RFCOMM connection...")
+                        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_SCAN) == PackageManager.PERMISSION_GRANTED || Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+                            bluetoothAdapter?.bluetoothLeScanner?.stopScan(scanCallback)
+                        }
+                        
+                        socket.connect()
+                        Log.d(TAG, "Bluetooth RFCOMM connected! Downloading photo...")
+                        
+                        mainHandler.post {
+                            metadataResultTextView.text = "📡 Bluetooth connected! Downloading real photo file bytes..."
+                        }
+                        
+                        socket.inputStream.use { input ->
+                            java.io.FileOutputStream(tempFile).use { output ->
+                                val buffer = ByteArray(4096)
+                                var bytesRead: Int
+                                var totalBytes = 0
+                                while (input.read(buffer).also { bytesRead = it } != -1) {
+                                    output.write(buffer, 0, bytesRead)
+                                    totalBytes += bytesRead
+                                }
+                                Log.d(TAG, "Downloaded $totalBytes bytes over Bluetooth RFCOMM")
+                                success = totalBytes > 0
+                            }
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Bluetooth RFCOMM connection failed", e)
+                try {
+                    val device = bluetoothAdapter?.getRemoteDevice(deviceAddress)
+                    if (device != null) {
+                        Log.d(TAG, "Attempting RFCOMM reflection fallback...")
+                        val m = device.javaClass.getMethod("createRfcommSocket", Int::class.javaPrimitiveType)
+                        val fallbackSocket = m.invoke(device, 1) as android.bluetooth.BluetoothSocket
+                        fallbackSocket.connect()
+                        Log.d(TAG, "Fallback RFCOMM connected! Downloading photo...")
+                        
+                        mainHandler.post {
+                            metadataResultTextView.text = "📡 Bluetooth connected (fallback)! Downloading photo file bytes..."
+                        }
+                        
+                        fallbackSocket.inputStream.use { input ->
+                            java.io.FileOutputStream(tempFile).use { output ->
+                                val buffer = ByteArray(4096)
+                                var bytesRead: Int
+                                var totalBytes = 0
+                                while (input.read(buffer).also { bytesRead = it } != -1) {
+                                    output.write(buffer, 0, bytesRead)
+                                    totalBytes += bytesRead
+                                }
+                                Log.d(TAG, "Downloaded $totalBytes bytes via reflection")
+                                success = totalBytes > 0
+                            }
+                        }
+                        socket = fallbackSocket
+                    }
+                } catch (ex: Exception) {
+                    Log.e(TAG, "RFCOMM reflection fallback also failed", ex)
+                }
+            } finally {
+                try {
+                    socket?.close()
+                } catch (ex: Exception) {
+                    Log.e(TAG, "Error closing socket", ex)
+                }
+            }
+            
+            mainHandler.post {
+                if (success) {
+                    pendingBlePhotoFile = tempFile
+                    startBlePhotoTransferSimulation()
+                } else {
+                    Log.d(TAG, "Bluetooth RFCOMM transfer was not successful. Falling back to MediaStore gallery scanner...")
+                    Toast.makeText(this@MainActivity, "Bluetooth RFCOMM failed. Scanning phone gallery for latest synced Sony photo...", Toast.LENGTH_LONG).show()
+                    scanAndFetchLatestPhoto()
+                }
+            }
+        }.start()
     }
 
     private fun checkStoragePermissionGranted(): Boolean {
@@ -575,7 +684,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         if (checkStoragePermissionGranted()) {
-            scanAndFetchLatestPhoto()
+            connectAndFetchPhotoOverBluetooth(address)
         } else {
             val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 Manifest.permission.READ_MEDIA_IMAGES
