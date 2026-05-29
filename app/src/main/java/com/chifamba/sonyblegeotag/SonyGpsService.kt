@@ -63,8 +63,8 @@ class SonyGpsService : Service() {
     private var locationCallback: LocationCallback? = null
     private var lastKnownLocation: Location? = null
 
-    private var isConnected = false
-    private var characteristicWritePending = false
+    @Volatile private var isConnected = false
+    @Volatile private var characteristicWritePending = false
     private val mainHandler = Handler(Looper.getMainLooper())
 
     // Watchdog connection timer running at a low-frequency rate (60 seconds) to conserve battery
@@ -301,6 +301,7 @@ class SonyGpsService : Service() {
                 } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                     Log.d(TAG, "Disconnected from GATT server.")
                     isConnected = false
+                    characteristicWritePending = false
                     stopLocationUpdates()
                     releaseWakeLock()
                     closeGatt()
@@ -308,6 +309,7 @@ class SonyGpsService : Service() {
             } else {
                 Log.e(TAG, "GATT Connection error: status=$status. Re-connecting.")
                 isConnected = false
+                characteristicWritePending = false
                 stopLocationUpdates()
                 releaseWakeLock()
                 closeGatt()
