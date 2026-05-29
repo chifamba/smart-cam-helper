@@ -126,12 +126,7 @@ class MainActivity : AppCompatActivity() {
         ActivityResultContracts.RequestPermission()
     ) { granted ->
         if (granted) {
-            val address = discoveredDeviceAddress
-            if (!address.isNullOrEmpty()) {
-                connectAndFetchPhotoOverBluetooth(address)
-            } else {
-                scanAndFetchLatestPhoto()
-            }
+            fetchCameraContentOverWifi()
         } else {
             metadataResultTextView.text = "❌ Error: Storage permission denied.\n\nPlease enable storage permissions in Settings to fetch and verify photos from your gallery."
             metadataResultTextView.setTextColor(android.graphics.Color.RED)
@@ -532,6 +527,265 @@ class MainActivity : AppCompatActivity() {
         dialog.show()
     }
 
+    private fun fetchCameraContentOverWifi() {
+        metadataResultTextView.text = "📡 Connecting to Sony Camera Web Server via Wi-Fi...\nTarget: http://192.168.122.1:8080"
+        metadataResultTextView.setTextColor(android.graphics.Color.DKGRAY)
+        metadataResultTextView.setBackgroundColor(android.graphics.Color.parseColor("#F5F5F5"))
+        previewImageView.visibility = android.view.View.GONE
+
+        Thread {
+            try {
+                val url = java.net.URL("http://192.168.122.1:8080/sony/avContent")
+                val conn = url.openConnection() as java.net.HttpURLConnection
+                conn.requestMethod = "POST"
+                conn.connectTimeout = 3000
+                conn.readTimeout = 5000
+                conn.doOutput = true
+                conn.setRequestProperty("Content-Type", "application/json")
+
+                val jsonPayload = """
+                    {
+                      "method": "getContentList",
+                      "params": [
+                        {
+                          "uri": "storage:memoryCard1",
+                          "stIdx": 0,
+                          "cnt": 30,
+                          "view": "date",
+                          "sort": ""
+                        }
+                      ],
+                      "id": 1,
+                      "version": "1.3"
+                    }
+                """.trimIndent()
+
+                conn.outputStream.use { os ->
+                    os.write(jsonPayload.toByteArray(Charsets.UTF_8))
+                }
+
+                if (conn.responseCode == 200) {
+                    val responseText = conn.inputStream.bufferedReader().use { it.readText() }
+                    Log.d(TAG, "Sony Camera Response: $responseText")
+                    
+                    val photoUrls = parseUrlsFromJsonResponse(responseText)
+                    
+                    mainHandler.post {
+                        if (photoUrls.isNotEmpty()) {
+                            showCameraPhotoSelectionDialog(photoUrls)
+                        } else {
+                            Toast.makeText(this@MainActivity, "Connected to camera, but no photos were found on SD card.", Toast.LENGTH_LONG).show()
+                            scanAndFetchLatestPhoto() 
+                        }
+                    }
+                } else {
+                    Log.w(TAG, "HTTP Response Code: ${conn.responseCode}")
+                    mainHandler.post {
+                        Toast.makeText(this@MainActivity, "Camera web server returned error ${conn.responseCode}. Scanning local gallery instead...", Toast.LENGTH_LONG).show()
+                        scanAndFetchLatestPhoto()
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Wi-Fi connection to camera failed", e)
+                mainHandler.post {
+                    Toast.makeText(this@MainActivity, "Camera Wi-Fi offline. Make sure you connect phone to camera Wi-Fi! Scanning local gallery...", Toast.LENGTH_LONG).show()
+                    scanAndFetchLatestPhoto()
+                }
+            }
+        }.start()
+    }
+
+    private fun parseUrlsFromJsonResponse(json: String): List<Pair<String, String>> {
+        val list = mutableListOf<Pair<String, String>>()
+        try {
+            val urlPattern = java.util.regex.Pattern.compile("\"url\"\\s*:\\s*\"([^\"]+)\"")
+            val namePattern = java.util.regex.Pattern.compile("\"fileName\"\\s*:\\s*\"([^\"]+)\"")
+            
+            val urlMatcher = urlPattern.matcher(json)
+            val nameMatcher = namePattern.matcher(json)
+            
+            while (urlMatcher.find()) {
+                val url = urlMatcher.group(1) ?: continue
+                var name = "DSC_Camera_Photo.jpg"
+                if (nameMatcher.find()) {
+                    name = nameMatcher.group(1) ?: name
+                }
+                list.add(Pair(url, name))
+            }
+        } catch (e: Exception) {
+            Log.e("SonyMainActivity", "Error parsing URLs from JSON", e)
+        }
+        return list
+    }
+
+    private fun downloadPhotoThumbnailFromUrl(photoUrl: String): android.graphics.Bitmap? {
+        return try {
+            val url = java.net.URL(photoUrl)
+            val conn = url.openConnection() as java.net.HttpURLConnection
+            conn.connectTimeout = 3000
+            conn.readTimeout = 3000
+            conn.inputStream.use { inputStream ->
+                val options = android.graphics.BitmapFactory.Options().apply {
+                    inSampleSize = 8 
+                }
+                android.graphics.BitmapFactory.decodeStream(inputStream, null, options)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error downloading thumbnail: $photoUrl", e)
+            null
+        }
+    }
+
+    private fun downloadFullPhotoFromCameraUrl(photoUrl: String) {
+        metadataResultTextView.text = "📡 Downloading selected photo from Camera over Wi-Fi...\nUrl: $photoUrl"
+        metadataResultTextView.setTextColor(android.graphics.Color.DKGRAY)
+        metadataResultTextView.setBackgroundColor(android.graphics.Color.parseColor("#F5F5F5"))
+        previewImageView.visibility = android.view.View.GONE
+
+        Thread {
+            var success = false
+            val tempFile = java.io.File(cacheDir, "ble_transferred_photo_temp.jpg")
+            
+            try {
+                val url = java.net.URL(photoUrl)
+                val conn = url.openConnection() as java.net.HttpURLConnection
+                conn.connectTimeout = 5000
+                conn.readTimeout = 10000
+                
+                conn.inputStream.use { input ->
+                    java.io.FileOutputStream(tempFile).use { output ->
+                        val buffer = ByteArray(4096)
+                        var bytesRead: Int
+                        var totalBytes = 0
+                        while (input.read(buffer).also { bytesRead = it } != -1) {
+                            output.write(buffer, 0, bytesRead)
+                            totalBytes += bytesRead
+                        }
+                        Log.d(TAG, "Downloaded $totalBytes bytes directly from camera Wi-Fi")
+                        success = totalBytes > 0
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error downloading full photo: $photoUrl", e)
+            }
+
+            mainHandler.post {
+                if (success) {
+                    pendingBlePhotoFile = tempFile
+                    startBlePhotoTransferSimulation()
+                } else {
+                    metadataResultTextView.text = "❌ Error: Failed to download photo from Camera web server."
+                    metadataResultTextView.setTextColor(android.graphics.Color.RED)
+                    metadataResultTextView.setBackgroundColor(android.graphics.Color.parseColor("#FFEBEE"))
+                }
+            }
+        }.start()
+    }
+
+    private fun showCameraPhotoSelectionDialog(photos: List<Pair<String, String>>) {
+        val builder = androidx.appcompat.app.AlertDialog.Builder(this)
+        
+        val titleView = TextView(this).apply {
+            text = "Select Photo on Sony Camera SD Card"
+            textSize = 20f
+            setPadding(40, 40, 40, 20)
+            setTextColor(android.graphics.Color.BLACK)
+            setTypeface(null, android.graphics.Typeface.BOLD)
+        }
+        builder.setCustomTitle(titleView)
+
+        val scrollView = android.widget.ScrollView(this)
+        val listContainer = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            setPadding(20, 10, 20, 20)
+        }
+        scrollView.addView(listContainer)
+
+        val dialog = builder.setView(scrollView)
+            .setNegativeButton("Cancel") { d, _ -> d.dismiss() }
+            .create()
+
+        for (photo in photos) {
+            val url = photo.first
+            val filename = photo.second
+            
+            val row = android.widget.LinearLayout(this).apply {
+                orientation = android.widget.LinearLayout.HORIZONTAL
+                setPadding(20, 24, 20, 24)
+                gravity = android.view.Gravity.CENTER_VERTICAL
+                isClickable = true
+                focusable = android.view.View.FOCUSABLE
+                
+                val outValue = android.util.TypedValue()
+                theme.resolveAttribute(android.R.attr.selectableItemBackground, outValue, true)
+                setBackgroundResource(outValue.resourceId)
+            }
+
+            val thumbView = android.widget.ImageView(this).apply {
+                layoutParams = android.widget.LinearLayout.LayoutParams(120, 120).apply {
+                    setMargins(0, 0, 30, 0)
+                }
+                scaleType = android.widget.ImageView.ScaleType.CENTER_CROP
+                setImageResource(android.R.drawable.ic_menu_gallery)
+                
+                Thread {
+                    val bmp = downloadPhotoThumbnailFromUrl(url)
+                    mainHandler.post {
+                        if (bmp != null) {
+                            setImageBitmap(bmp)
+                        }
+                    }
+                }.start()
+            }
+            row.addView(thumbView)
+
+            val textLayout = android.widget.LinearLayout(this).apply {
+                orientation = android.widget.LinearLayout.VERTICAL
+                layoutParams = android.widget.LinearLayout.LayoutParams(
+                    android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+                    android.widget.LinearLayout.LayoutParams.WRAP_CONTENT
+                )
+            }
+
+            val nameView = TextView(this).apply {
+                text = filename
+                textSize = 15f
+                setTextColor(android.graphics.Color.BLACK)
+                setTypeface(null, android.graphics.Typeface.BOLD)
+                ellipsize = android.text.TextUtils.TruncateAt.END
+                maxLines = 1
+            }
+            textLayout.addView(nameView)
+
+            val detailView = TextView(this).apply {
+                textSize = 12f
+                setTextColor(android.graphics.Color.GRAY)
+                text = "Tap to download directly from Camera over Wi-Fi"
+            }
+            textLayout.addView(detailView)
+            
+            row.addView(textLayout)
+
+            row.setOnClickListener {
+                dialog.dismiss()
+                downloadFullPhotoFromCameraUrl(url)
+            }
+
+            listContainer.addView(row)
+
+            val itemDivider = android.view.View(this).apply {
+                layoutParams = android.widget.LinearLayout.LayoutParams(
+                    android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+                    2
+                )
+                setBackgroundColor(android.graphics.Color.parseColor("#E0E0E0"))
+            }
+            listContainer.addView(itemDivider)
+        }
+
+        dialog.show()
+    }
+
     private fun scanAndFetchLatestPhoto() {
         metadataResultTextView.text = "🔍 Scanning local storage for Sony photos..."
         metadataResultTextView.setTextColor(android.graphics.Color.DKGRAY)
@@ -902,7 +1156,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         if (checkStoragePermissionGranted()) {
-            connectAndFetchPhotoOverBluetooth(address)
+            fetchCameraContentOverWifi()
         } else {
             val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 Manifest.permission.READ_MEDIA_IMAGES
