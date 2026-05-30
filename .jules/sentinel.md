@@ -1,4 +1,4 @@
-## 2024-05-24 - [Replaced Insecure XOR Cryptography with Android KeyStore AES-GCM]
-**Vulnerability:** The application was using a hardcoded, single-byte XOR key (`0x5F`) to "encrypt" and "decrypt" sensitive strings (like Bluetooth MAC addresses) stored in `SharedPreferences`. This is Security Theater and provides no real protection against reverse engineering or data extraction.
-**Learning:** Legacy obfuscation techniques are often used in place of actual encryption due to perceived complexity. However, Android provides the `KeyStore` system to securely manage cryptographic keys without hardcoding them in the application binary.
-**Prevention:** Always use the Android `KeyStore` system with a strong algorithm (like AES-GCM) to generate hardware-backed keys for encrypting data at rest. Implement a fallback mechanism to handle legacy data during migrations to prevent app crashes for existing users.
+## 2024-05-30 - Fix insecure encryption fallback and cleartext traffic
+**Vulnerability:** Weak XOR encryption fallback and cleartext HTTP traffic allowed.
+**Learning:** The application had an insecure fallback to XOR encryption if AES-GCM failed, and permitted cleartext HTTP traffic which is risky.
+**Prevention:** Removed the XOR fallback to ensure failures fail securely and disabled cleartext traffic in AndroidManifest.xml.
