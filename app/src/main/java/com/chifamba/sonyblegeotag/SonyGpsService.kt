@@ -533,9 +533,8 @@ class SonyGpsService : Service() {
         return try {
             CryptoManager.encrypt(value)
         } catch (e: Exception) {
-            val key = 0x5F.toByte()
-            val result = value.toByteArray().map { (it.toInt() xor key.toInt()).toByte() }.toByteArray()
-            android.util.Base64.encodeToString(result, android.util.Base64.NO_WRAP)
+            Log.e(TAG, "Error encrypting string", e)
+            ""
         }
     }
 
@@ -543,14 +542,8 @@ class SonyGpsService : Service() {
         return try {
             CryptoManager.decrypt(value)
         } catch (e: Exception) {
-            try {
-                val decoded = android.util.Base64.decode(value, android.util.Base64.NO_WRAP)
-                val key = 0x5F.toByte()
-                val decrypted = decoded.map { (it.toInt() xor key.toInt()).toByte() }.toByteArray()
-                String(decrypted)
-            } catch (ex: Exception) {
-                ""
-            }
+            Log.e(TAG, "Error decrypting string", e)
+            ""
         }
     }
 
