@@ -112,7 +112,12 @@ class SonyGpsService : Service() {
         if (action == ACTION_START) {
             targetDeviceAddress = intent.getStringExtra(EXTRA_DEVICE_ADDRESS)
             if (!targetDeviceAddress.isNullOrEmpty()) {
-                sharedPrefs.edit().putString("last_device_address", encryptString(targetDeviceAddress!!)).apply()
+                val encrypted = encryptString(targetDeviceAddress!!)
+                if (encrypted != null) {
+                    sharedPrefs.edit().putString("last_device_address", encrypted).apply()
+                } else {
+                    Log.w(TAG, "Not saving device address due to encryption failure.")
+                }
             }
         } else if (action == ACTION_STOP) {
             Log.d(TAG, "Stop requested")
@@ -529,13 +534,12 @@ class SonyGpsService : Service() {
         return "XX:XX:XX:XX:" + address.substring(address.length - 5)
     }
 
-    private fun encryptString(value: String): String {
+    private fun encryptString(value: String): String? {
         return try {
             CryptoManager.encrypt(value)
         } catch (e: Exception) {
-            val key = 0x5F.toByte()
-            val result = value.toByteArray().map { (it.toInt() xor key.toInt()).toByte() }.toByteArray()
-            android.util.Base64.encodeToString(result, android.util.Base64.NO_WRAP)
+            Log.e(TAG, "Encryption failed. Refusing to fallback to insecure cipher.", e)
+            null
         }
     }
 
