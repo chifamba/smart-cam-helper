@@ -116,6 +116,7 @@ class SonyGpsService : Service() {
                 if (encrypted != null) {
                     sharedPrefs.edit().putString("last_device_address", encrypted).apply()
                 } else {
+                    sharedPrefs.edit().remove("last_device_address").apply()
                     Log.w(TAG, "Not saving device address due to encryption failure.")
                 }
             }
@@ -547,14 +548,8 @@ class SonyGpsService : Service() {
         return try {
             CryptoManager.decrypt(value)
         } catch (e: Exception) {
-            try {
-                val decoded = android.util.Base64.decode(value, android.util.Base64.NO_WRAP)
-                val key = 0x5F.toByte()
-                val decrypted = decoded.map { (it.toInt() xor key.toInt()).toByte() }.toByteArray()
-                String(decrypted)
-            } catch (ex: Exception) {
-                ""
-            }
+            Log.e(TAG, "Error decrypting string", e)
+            ""
         }
     }
 
