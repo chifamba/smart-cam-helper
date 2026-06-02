@@ -521,6 +521,11 @@ class MainActivity : AppCompatActivity() {
     private fun downloadPhotoThumbnailFromUrl(photoUrl: String): android.graphics.Bitmap? {
         return try {
             val url = java.net.URL(photoUrl)
+            val expectedIp = getCameraIpAddress()
+            if (url.host != expectedIp) {
+                Log.e(TAG, "SSRF Protection: Attempted to fetch thumbnail from unauthorized host: ${url.host}")
+                return null
+            }
             val conn = url.openConnection() as java.net.HttpURLConnection
             conn.connectTimeout = 3000
             conn.readTimeout = 3000
@@ -548,6 +553,10 @@ class MainActivity : AppCompatActivity() {
             
             try {
                 val url = java.net.URL(photoUrl)
+                val expectedIp = getCameraIpAddress()
+                if (url.host != expectedIp) {
+                    throw SecurityException("SSRF Protection: Attempted to download photo from unauthorized host: ${url.host}")
+                }
                 val conn = url.openConnection() as java.net.HttpURLConnection
                 conn.connectTimeout = 5000
                 conn.readTimeout = 10000
