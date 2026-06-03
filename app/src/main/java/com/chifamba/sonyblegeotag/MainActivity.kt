@@ -557,9 +557,13 @@ class MainActivity : AppCompatActivity() {
                         val buffer = ByteArray(4096)
                         var bytesRead: Int
                         var totalBytes = 0
+                        val maxBytes = 50 * 1024 * 1024 // 50MB limit to prevent storage exhaustion
                         while (input.read(buffer).also { bytesRead = it } != -1) {
-                            output.write(buffer, 0, bytesRead)
                             totalBytes += bytesRead
+                            if (totalBytes > maxBytes) {
+                                throw java.io.IOException("File size exceeds maximum allowed limit of 50MB")
+                            }
+                            output.write(buffer, 0, bytesRead)
                         }
                         Log.d(TAG, "Downloaded $totalBytes bytes directly from camera Wi-Fi")
                         success = totalBytes > 0
