@@ -1,4 +1,4 @@
-## 2024-05-30 - Fix insecure encryption fallback and cleartext traffic
-**Vulnerability:** Weak XOR encryption fallback and cleartext HTTP traffic allowed.
-**Learning:** The application had an insecure fallback to XOR encryption if AES-GCM failed, and permitted cleartext HTTP traffic which is risky.
-**Prevention:** Removed the XOR fallback to ensure failures fail securely and disabled cleartext traffic in AndroidManifest.xml.
+## 2024-06-04 - [CRITICAL] Fix unencrypted transmission of highly sensitive GPS data over BLE
+**Vulnerability:** The application was transmitting highly sensitive GPS coordinates to paired Sony cameras over a Bluetooth Low Energy (BLE) link without validating if the connection was fully bonded (`BOND_BONDED`). This allowed the transmission of sensitive location data in plaintext.
+**Learning:** Checking the pairing state `if (gatt.device.bondState != BluetoothDevice.BOND_BONDED)` and only logging a warning without aborting the transmission left a significant loophole where data could be intercepted by a nearby adversary capturing BLE traffic.
+**Prevention:** In functions transmitting sensitive telemetry or coordinates, implement strict early exits returning `if` the connection is not securely bonded/encrypted.
