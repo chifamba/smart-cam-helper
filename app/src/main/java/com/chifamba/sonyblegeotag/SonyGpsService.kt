@@ -382,7 +382,8 @@ class SonyGpsService : Service() {
 
         // Double check bonding. If unbonded, writing might pop up system pairing dialog
         if (gatt.device.bondState != BluetoothDevice.BOND_BONDED) {
-            Log.w(TAG, "Encryption/Bonding is not fully completed yet.")
+            Log.w(TAG, "Encryption/Bonding is not fully completed yet. Aborting GPS transmission to prevent plain-text leakage.")
+            return
         }
 
         val service = gatt.getService(LOCATION_SERVICE_UUID) ?: return
