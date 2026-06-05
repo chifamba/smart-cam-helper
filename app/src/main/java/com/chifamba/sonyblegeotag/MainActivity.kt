@@ -85,7 +85,7 @@ class MainActivity : AppCompatActivity() {
                 }
             } catch (e: Exception) {
                 Log.e("SonyMainActivity", "Error parsing image EXIF", e)
-                metadataResultTextView.text = "Error parsing photo metadata: ${e.message}"
+                metadataResultTextView.text = "Error parsing photo metadata: Please ensure the photo is valid."
                 metadataResultTextView.setTextColor(android.graphics.Color.RED)
             }
         }
@@ -1146,7 +1146,7 @@ class MainActivity : AppCompatActivity() {
             }
         } catch (e: Exception) {
             Log.e("SonyMainActivity", "Error parsing image EXIF", e)
-            metadataResultTextView.text = "Error verifying EXIF headers: ${e.message}"
+            metadataResultTextView.text = "Error verifying EXIF headers: Please ensure the photo is valid."
             metadataResultTextView.setTextColor(android.graphics.Color.RED)
         }
     }
