@@ -557,6 +557,7 @@ class MainActivity : AppCompatActivity() {
                         val buffer = ByteArray(4096)
                         var bytesRead: Int
                         var totalBytes = 0
+
                         while (input.read(buffer).also { bytesRead = it } != -1) {
                             output.write(buffer, 0, bytesRead)
                             totalBytes += bytesRead
