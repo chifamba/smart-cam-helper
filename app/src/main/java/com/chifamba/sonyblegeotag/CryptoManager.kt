@@ -27,6 +27,8 @@ object CryptoManager {
                 .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
                 .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
                 .setRandomizedEncryptionRequired(true)
+                // Sentinel: Explicitly set key size to 256 bits for AES-256 strength
+                .setKeySize(256)
                 .build()
             keyGenerator.init(keyGenParameterSpec)
             return keyGenerator.generateKey()
@@ -35,24 +37,34 @@ object CryptoManager {
     }
 
     fun encrypt(data: String): String {
-        val cipher = Cipher.getInstance(TRANSFORMATION)
-        cipher.init(Cipher.ENCRYPT_MODE, getSecretKey())
-        val iv = cipher.iv
-        val encryptedData = cipher.doFinal(data.toByteArray(Charsets.UTF_8))
+        return try {
+            val cipher = Cipher.getInstance(TRANSFORMATION)
+            cipher.init(Cipher.ENCRYPT_MODE, getSecretKey())
+            val iv = cipher.iv
+            val encryptedData = cipher.doFinal(data.toByteArray(Charsets.UTF_8))
 
-        val combined = iv + encryptedData
-        return android.util.Base64.encodeToString(combined, android.util.Base64.NO_WRAP)
+            val combined = iv + encryptedData
+            android.util.Base64.encodeToString(combined, android.util.Base64.NO_WRAP)
+        } catch (e: Exception) {
+            // Sentinel: Catch exceptions to prevent app crash and information leakage
+            ""
+        }
     }
 
     fun decrypt(encryptedData: String): String {
-        val combined = android.util.Base64.decode(encryptedData, android.util.Base64.NO_WRAP)
-        val iv = combined.copyOfRange(0, 12)
-        val encrypted = combined.copyOfRange(12, combined.size)
+        return try {
+            val combined = android.util.Base64.decode(encryptedData, android.util.Base64.NO_WRAP)
+            val iv = combined.copyOfRange(0, 12)
+            val encrypted = combined.copyOfRange(12, combined.size)
 
-        val cipher = Cipher.getInstance(TRANSFORMATION)
-        val spec = GCMParameterSpec(128, iv)
-        cipher.init(Cipher.DECRYPT_MODE, getSecretKey(), spec)
+            val cipher = Cipher.getInstance(TRANSFORMATION)
+            val spec = GCMParameterSpec(128, iv)
+            cipher.init(Cipher.DECRYPT_MODE, getSecretKey(), spec)
 
-        return String(cipher.doFinal(encrypted), Charsets.UTF_8)
+            String(cipher.doFinal(encrypted), Charsets.UTF_8)
+        } catch (e: Exception) {
+            // Sentinel: Catch exceptions to prevent app crash and information leakage
+            ""
+        }
     }
 }
