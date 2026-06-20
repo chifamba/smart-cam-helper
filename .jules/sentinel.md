@@ -1,4 +1,9 @@
-## 2024-05-30 - Fix insecure encryption fallback and cleartext traffic
-**Vulnerability:** Weak XOR encryption fallback and cleartext HTTP traffic allowed.
-**Learning:** The application had an insecure fallback to XOR encryption if AES-GCM failed, and permitted cleartext HTTP traffic which is risky.
-**Prevention:** Removed the XOR fallback to ensure failures fail securely and disabled cleartext traffic in AndroidManifest.xml.
+## 2024-05-30 - Insecure Encryption Fallback Attempt Discovered
+**Vulnerability:** A previous PR attempted to add a "fallback" encryption mechanism using simple XOR masking if Android KeyStore initialization failed. This is a severe vulnerability as XOR masking provides no real confidentiality and creates a false sense of security (security theater).
+**Learning:** Never implement weak "fallback" cryptography. If secure storage (like KeyStore) is unavailable or fails, the application MUST fail securely (e.g., abort the operation, return null, or log an error and refuse to store/transmit the sensitive data) rather than silently degrading to insecure methods.
+**Prevention:** Remove fallback logic. Cryptographic operations should throw exceptions or explicitly return null/failure states when the primary secure mechanism fails. Ensure `CryptoManager` strictly relies on KeyStore and `AES/GCM/NoPadding`.
+
+## 2024-05-18 - Missing Explicit Key Size and Insecure Failure in CryptoManager
+**Vulnerability:** Android KeyStore generation in `CryptoManager.kt` relied on default key size, which might not be consistently 256 bits across all API levels or devices. In addition, the `encrypt` and `decrypt` operations did not handle exceptions properly, allowing potential application crashes and leakage of internal state (such as stack traces) on failure.
+**Learning:** Always specify an explicit `setKeySize` (e.g., 256 for AES) when generating keys via Android KeyStore to ensure cryptographic strength. For cryptographic operations, ensure that unhandled exceptions are caught and handled securely. Failing safely by logging internally and returning a default value (like an empty string) prevents crash-based leaks or Denial of Service conditions.
+**Prevention:** Always set `.setKeySize()` in `KeyGenParameterSpec.Builder`. Always wrap raw cryptographic operations (`Cipher.doFinal`, `Base64.decode`) in `try-catch` blocks and implement secure fallback logic that avoids leaking vulnerability details.
