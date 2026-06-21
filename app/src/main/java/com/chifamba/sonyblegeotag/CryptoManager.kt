@@ -57,7 +57,8 @@ object CryptoManager {
         return try {
             val combined = android.util.Base64.decode(encryptedData, android.util.Base64.NO_WRAP)
             val ivLength = 12
-            val minCiphertextLength = ivLength + 16 // 128-bit GCM tag
+            val gcmTagLength = 16 // 128-bit GCM authentication tag
+            val minCiphertextLength = ivLength + gcmTagLength
             if (combined.size < minCiphertextLength) return ""
             val iv = combined.copyOfRange(0, ivLength)
             val encrypted = combined.copyOfRange(ivLength, combined.size)
