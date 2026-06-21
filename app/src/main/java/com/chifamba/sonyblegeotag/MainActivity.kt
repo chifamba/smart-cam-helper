@@ -457,7 +457,7 @@ class MainActivity : AppCompatActivity() {
                     val responseText = conn.inputStream.bufferedReader().use { it.readText() }
                     Log.d(TAG, "Sony Camera Response: $responseText")
                     
-                    val photoUrls = parseUrlsFromJsonResponse(responseText)
+                    val photoUrls = parseUrlsFromJsonResponse(responseText, cameraIp)
                     
                     mainHandler.post {
                         if (photoUrls.isNotEmpty()) {
@@ -495,7 +495,7 @@ class MainActivity : AppCompatActivity() {
         }.start()
     }
 
-    private fun parseUrlsFromJsonResponse(json: String): List<Pair<String, String>> {
+    private fun parseUrlsFromJsonResponse(json: String, cameraIp: String): List<Pair<String, String>> {
         val list = mutableListOf<Pair<String, String>>()
         try {
             val urlPattern = java.util.regex.Pattern.compile("\"url\"\\s*:\\s*\"([^\"]+)\"")
@@ -506,6 +506,19 @@ class MainActivity : AppCompatActivity() {
             
             while (urlMatcher.find()) {
                 val url = urlMatcher.group(1) ?: continue
+
+                // SSRF Protection: Validate that the URL points to the expected camera IP and protocol
+                try {
+                    val parsedUrl = java.net.URL(url)
+                    if (parsedUrl.protocol != "http" || parsedUrl.host != cameraIp) {
+                        Log.w(TAG, "Security Warning: Rejecting unexpected URL from camera payload: $url")
+                        continue
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "Security Warning: Invalid URL format in camera payload: $url")
+                    continue
+                }
+
                 var name = "DSC_Camera_Photo.jpg"
                 if (nameMatcher.find()) {
                     name = nameMatcher.group(1) ?: name

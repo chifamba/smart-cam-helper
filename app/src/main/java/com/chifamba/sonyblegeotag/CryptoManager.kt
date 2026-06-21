@@ -47,7 +47,7 @@ object CryptoManager {
             val combined = iv + encryptedData
             android.util.Base64.encodeToString(combined, android.util.Base64.NO_WRAP)
         } catch (e: Exception) {
-            Log.e(TAG, "Encryption failed securely", e)
+            Log.e(TAG, "Encryption failed securely")
             ""
         }
     }
@@ -56,7 +56,7 @@ object CryptoManager {
         if (encryptedData.isEmpty()) return ""
         return try {
             val combined = android.util.Base64.decode(encryptedData, android.util.Base64.NO_WRAP)
-            if (combined.size < 12) return ""
+            if (combined.size < 28) return ""
             val iv = combined.copyOfRange(0, 12)
             val encrypted = combined.copyOfRange(12, combined.size)
 
@@ -66,7 +66,7 @@ object CryptoManager {
 
             String(cipher.doFinal(encrypted), Charsets.UTF_8)
         } catch (e: Exception) {
-            Log.e(TAG, "Decryption failed securely", e)
+            Log.e(TAG, "Decryption failed securely")
             ""
         }
     }
