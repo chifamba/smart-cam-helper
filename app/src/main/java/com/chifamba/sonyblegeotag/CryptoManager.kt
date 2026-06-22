@@ -20,10 +20,12 @@ object CryptoManager {
     private fun getSecretKey(): SecretKey {
         if (!keyStore.containsAlias(ALIAS)) {
             val keyGenerator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, ANDROID_KEYSTORE)
+            // Sentinel Security Fix: Explicitly specify 256-bit key size for AES-256 (GCM)
             val keyGenParameterSpec = KeyGenParameterSpec.Builder(
                 ALIAS,
                 KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT
             )
+                .setKeySize(256)
                 .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
                 .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
                 .setRandomizedEncryptionRequired(true)
