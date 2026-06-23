@@ -27,6 +27,8 @@ object CryptoManager {
                 .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
                 .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
                 .setRandomizedEncryptionRequired(true)
+                // Sentinel: Enforce AES-256 for hardened security instead of relying on default (often 128-bit)
+                .setKeySize(256)
                 .build()
             keyGenerator.init(keyGenParameterSpec)
             return keyGenerator.generateKey()
