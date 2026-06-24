@@ -131,7 +131,7 @@ class SonyGpsService : Service() {
         // If system restarts service, targetDeviceAddress is null. Load persisted address.
         if (targetDeviceAddress.isNullOrEmpty()) {
             val saved = sharedPrefs.getString("last_device_address", null)
-            targetDeviceAddress = if (!saved.isNullOrEmpty()) decryptString(saved) else null
+            targetDeviceAddress = if (!saved.isNullOrEmpty()) decryptString(saved!!) else null
         }
 
         if (!targetDeviceAddress.isNullOrEmpty()) {
@@ -544,12 +544,12 @@ class SonyGpsService : Service() {
         }
     }
 
-    private fun decryptString(value: String): String {
+    private fun decryptString(value: String): String? {
         return try {
             CryptoManager.decrypt(value)
         } catch (e: Exception) {
             Log.e(TAG, "Error decrypting string", e)
-            ""
+            null
         }
     }
 
