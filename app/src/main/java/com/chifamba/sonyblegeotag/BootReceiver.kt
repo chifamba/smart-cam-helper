@@ -25,12 +25,12 @@ class BootReceiver : BroadcastReceiver() {
         }
     }
 
-    private fun decryptString(value: String): String {
+    private fun decryptString(value: String): String? {
         return try {
             CryptoManager.decrypt(value)
         } catch (e: Exception) {
-            android.util.Log.e("SonyBootReceiver", "Error decrypting string", e)
-            ""
+            android.util.Log.e("SonyBootReceiver", "Error decrypting string. Failing securely by returning null.", e)
+            null
         }
     }
 }
