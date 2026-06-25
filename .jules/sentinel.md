@@ -7,3 +7,7 @@
 **Vulnerability:** The application parsed photo URLs from a JSON response over a local HTTP connection without validating the protocol or host, allowing potential Server-Side Request Forgery (SSRF) if a malicious hotspot supplied arbitrary URLs.
 **Learning:** Blindly trusting URLs provided by an external device or network service, even on a local connection, can lead to SSRF vulnerabilities.
 **Prevention:** Always validate the protocol and host of URLs received from external sources against an expected allowlist before initiating requests.
+## 2024-05-18 - Fix Fail-Open Cryptography & Set Key Size
+**Vulnerability:** `decryptString` in Android keystore integrations caught exceptions and returned empty strings (`""`) by default.
+**Learning:** Returning empty strings on crypto failures can silently overwrite valid saved preferences/data in the app, losing paired camera configurations rather than cleanly failing.
+**Prevention:** Failing securely means throwing exceptions or returning nullable types (`null`) so callers handle state cleanly without data loss.
