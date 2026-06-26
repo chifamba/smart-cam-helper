@@ -7,3 +7,7 @@
 **Vulnerability:** The application parsed photo URLs from a JSON response over a local HTTP connection without validating the protocol or host, allowing potential Server-Side Request Forgery (SSRF) if a malicious hotspot supplied arbitrary URLs.
 **Learning:** Blindly trusting URLs provided by an external device or network service, even on a local connection, can lead to SSRF vulnerabilities.
 **Prevention:** Always validate the protocol and host of URLs received from external sources against an expected allowlist before initiating requests.
+## 2024-05-18 - [Fail Securely: Returning Null for Cryptographic Failure]
+**Vulnerability:** Crypto decryptions that failed would return empty strings `""`.
+**Learning:** Returning empty strings on cryptographic failure introduces a risk of data loss or unintentional overwrites, specifically if code assumes an empty string means a legitimate empty value instead of a complete failure of the operation.
+**Prevention:** Always ensure cryptographic operations fail securely by either throwing explicit exceptions or returning `null` to signal to the caller that the operation did not complete successfully, enabling safer fallback logic.
