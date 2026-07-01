@@ -148,15 +148,17 @@ class SonyGpsService : Service() {
     }
 
     private fun startServiceForeground() {
-        val channel = NotificationChannel(
-            NOTIFICATION_CHANNEL_ID,
-            "Sony GPS Geotagger Connection",
-            NotificationManager.IMPORTANCE_LOW
-        ).apply {
-            description = "Maintains constant BLE connection and GPS sync with Sony camera."
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                NOTIFICATION_CHANNEL_ID,
+                "Sony GPS Geotagger Connection",
+                NotificationManager.IMPORTANCE_LOW
+            ).apply {
+                description = "Maintains constant BLE connection and GPS sync with Sony camera."
+            }
+            val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            notificationManager.createNotificationChannel(channel)
         }
-        val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        notificationManager.createNotificationChannel(channel)
 
         val pendingIntent = PendingIntent.getActivity(
             this, 0,
@@ -544,12 +546,14 @@ class SonyGpsService : Service() {
         }
     }
 
-    private fun decryptString(value: String): String {
+    // Security Fix: Fail securely by returning null instead of an empty string
+    // An empty string could lead to data loss or overwrite bugs.
+    private fun decryptString(value: String): String? {
         return try {
             CryptoManager.decrypt(value)
         } catch (e: Exception) {
             Log.e(TAG, "Error decrypting string", e)
-            ""
+            null
         }
     }
 
