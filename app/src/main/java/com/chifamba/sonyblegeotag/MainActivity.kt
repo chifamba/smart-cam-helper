@@ -297,7 +297,9 @@ class MainActivity : AppCompatActivity() {
                 setPadding(20, 24, 20, 24)
                 gravity = android.view.Gravity.CENTER_VERTICAL
                 isClickable = true
-                focusable = android.view.View.FOCUSABLE
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                    focusable = android.view.View.FOCUSABLE
+                }
                 
                 val outValue = android.util.TypedValue()
                 theme.resolveAttribute(android.R.attr.selectableItemBackground, outValue, true)
@@ -629,7 +631,9 @@ class MainActivity : AppCompatActivity() {
                 setPadding(20, 24, 20, 24)
                 gravity = android.view.Gravity.CENTER_VERTICAL
                 isClickable = true
-                focusable = android.view.View.FOCUSABLE
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                    focusable = android.view.View.FOCUSABLE
+                }
                 
                 val outValue = android.util.TypedValue()
                 theme.resolveAttribute(android.R.attr.selectableItemBackground, outValue, true)
@@ -951,21 +955,25 @@ class MainActivity : AppCompatActivity() {
         bonded: Set<android.bluetooth.BluetoothDevice>?,
         connected: List<android.bluetooth.BluetoothDevice>?
     ): android.bluetooth.BluetoothDevice? {
-        connected?.forEach { device ->
-            val name = if (ActivityCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED || Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
-                device.name
-            } else null
-            if (!name.isNullOrEmpty() && (name.contains("Sony", ignoreCase = true) || name.contains("ILCE", ignoreCase = true) || name.contains("DSC", ignoreCase = true))) {
-                return device
+        if (connected != null) {
+            for (device in connected) {
+                val name = if (ActivityCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED || Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+                    device.name
+                } else null
+                if (!name.isNullOrEmpty() && (name.contains("Sony", ignoreCase = true) || name.contains("ILCE", ignoreCase = true) || name.contains("DSC", ignoreCase = true))) {
+                    return device
+                }
             }
         }
         
-        bonded?.forEach { device ->
-            val name = if (ActivityCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED || Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
-                device.name
-            } else null
-            if (!name.isNullOrEmpty() && (name.contains("Sony", ignoreCase = true) || name.contains("ILCE", ignoreCase = true) || name.contains("DSC", ignoreCase = true))) {
-                return device
+        if (bonded != null) {
+            for (device in bonded) {
+                val name = if (ActivityCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED || Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+                    device.name
+                } else null
+                if (!name.isNullOrEmpty() && (name.contains("Sony", ignoreCase = true) || name.contains("ILCE", ignoreCase = true) || name.contains("DSC", ignoreCase = true))) {
+                    return device
+                }
             }
         }
         return null
@@ -1085,12 +1093,12 @@ class MainActivity : AppCompatActivity() {
 
 
 
-    private fun decryptString(value: String): String {
+    private fun decryptString(value: String): String? {
         return try {
             CryptoManager.decrypt(value)
         } catch (e: Exception) {
-            Log.e("SonyMainActivity", "Error decrypting string", e)
-            ""
+            Log.e("SonyMainActivity", "Error decrypting string. Failing securely.", e)
+            null
         }
     }
 
