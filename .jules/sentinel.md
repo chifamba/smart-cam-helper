@@ -7,3 +7,7 @@
 **Vulnerability:** The application parsed photo URLs from a JSON response over a local HTTP connection without validating the protocol or host, allowing potential Server-Side Request Forgery (SSRF) if a malicious hotspot supplied arbitrary URLs.
 **Learning:** Blindly trusting URLs provided by an external device or network service, even on a local connection, can lead to SSRF vulnerabilities.
 **Prevention:** Always validate the protocol and host of URLs received from external sources against an expected allowlist before initiating requests.
+## 2024-05-24 - Cryptographic Error Handling and Key Size
+**Vulnerability:** The AES key generation didn't explicitly enforce a 256-bit key size.
+**Learning:** Returning empty strings instead of `null` on failure for cryptographic operations can silently cause data loss or overwrite bugs when decryption fails (e.g., when the key changes).
+**Prevention:** Explicitly set strong key sizes (e.g., 256 for AES) using `.setKeySize(256)` during generation to prevent downgrade attacks.
