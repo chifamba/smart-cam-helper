@@ -544,12 +544,13 @@ class SonyGpsService : Service() {
         }
     }
 
-    private fun decryptString(value: String): String {
+    // Security: Fail securely by returning null instead of empty string on decryption failure
+    private fun decryptString(value: String): String? {
         return try {
             CryptoManager.decrypt(value)
         } catch (e: Exception) {
             Log.e(TAG, "Error decrypting string", e)
-            ""
+            null
         }
     }
 
