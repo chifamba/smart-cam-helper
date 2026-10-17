@@ -1,0 +1,7 @@
+🛡️ Sentinel: [MEDIUM] Fix insecure decryptString fallback & Key Size
+
+🚨 Severity: MEDIUM
+💡 Vulnerability: `decryptString` wrapper functions returned an empty string ("") on error, which could be interpreted as valid data instead of a failure. Also, AES key generation lacked explicit sizing.
+🎯 Impact: An empty string return might bypass `isNullOrEmpty()` checks, causing data overwrite bugs or data loss. Missing explicit 256-bit key size relies on default Android behavior.
+🔧 Fix: Updated `decryptString` in BootReceiver, MainActivity, and SonyGpsService to return `String?` and `null` on failure. Updated `CryptoManager.kt` to explicitly use `setKeySize(256)`.
+✅ Verification: Code logic confirmed to return nullable types and call sites already handled null using `isNullOrEmpty()`. Compilation validates correctly.
