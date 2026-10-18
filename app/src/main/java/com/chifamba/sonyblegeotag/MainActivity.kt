@@ -1085,12 +1085,13 @@ class MainActivity : AppCompatActivity() {
 
 
 
-    private fun decryptString(value: String): String {
+    private fun decryptString(value: String): String? {
         return try {
             CryptoManager.decrypt(value)
         } catch (e: Exception) {
             Log.e("SonyMainActivity", "Error decrypting string", e)
-            ""
+            // SECURITY: Fail securely by returning null instead of empty string on decryption failure
+            null
         }
     }
 
