@@ -27,6 +27,7 @@ object CryptoManager {
                 .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
                 .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
                 .setRandomizedEncryptionRequired(true)
+                .setKeySize(256)
                 .build()
             keyGenerator.init(keyGenParameterSpec)
             return keyGenerator.generateKey()
