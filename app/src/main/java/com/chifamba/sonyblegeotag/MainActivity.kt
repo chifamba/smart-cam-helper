@@ -297,7 +297,9 @@ class MainActivity : AppCompatActivity() {
                 setPadding(20, 24, 20, 24)
                 gravity = android.view.Gravity.CENTER_VERTICAL
                 isClickable = true
-                focusable = android.view.View.FOCUSABLE
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    focusable = android.view.View.FOCUSABLE
+                }
                 
                 val outValue = android.util.TypedValue()
                 theme.resolveAttribute(android.R.attr.selectableItemBackground, outValue, true)
@@ -629,7 +631,9 @@ class MainActivity : AppCompatActivity() {
                 setPadding(20, 24, 20, 24)
                 gravity = android.view.Gravity.CENTER_VERTICAL
                 isClickable = true
-                focusable = android.view.View.FOCUSABLE
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    focusable = android.view.View.FOCUSABLE
+                }
                 
                 val outValue = android.util.TypedValue()
                 theme.resolveAttribute(android.R.attr.selectableItemBackground, outValue, true)
@@ -1085,12 +1089,13 @@ class MainActivity : AppCompatActivity() {
 
 
 
-    private fun decryptString(value: String): String {
+    private fun decryptString(value: String): String? {
         return try {
             CryptoManager.decrypt(value)
         } catch (e: Exception) {
             Log.e("SonyMainActivity", "Error decrypting string", e)
-            ""
+            // Security: Fail securely by returning null instead of empty string to prevent data loss/overwrite bugs
+            null
         }
     }
 
