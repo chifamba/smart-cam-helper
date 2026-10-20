@@ -929,7 +929,15 @@ class MainActivity : AppCompatActivity() {
     private fun onAllPermissionsGranted() {
         val sharedPrefs = getSharedPreferences("sony_ble_prefs", Context.MODE_PRIVATE)
         val saved = sharedPrefs.getString("last_device_address", null)
-        val savedAddress = if (!saved.isNullOrEmpty()) decryptString(saved) else null
+        var savedAddress: String? = null
+        if (!saved.isNullOrEmpty()) {
+            val decrypted = decryptString(saved)
+            if (decrypted != null) {
+                savedAddress = decrypted
+            } else {
+                android.util.Log.e("SonyMainActivity", "Decryption failed, treating as no saved address.")
+            }
+        }
         if (!savedAddress.isNullOrEmpty()) {
             discoveredDeviceAddress = savedAddress
             statusTextView.text = "Status: Service Active.\nConnected camera: $savedAddress"
@@ -1085,12 +1093,12 @@ class MainActivity : AppCompatActivity() {
 
 
 
-    private fun decryptString(value: String): String {
+    private fun decryptString(value: String): String? {
         return try {
             CryptoManager.decrypt(value)
         } catch (e: Exception) {
             Log.e("SonyMainActivity", "Error decrypting string", e)
-            ""
+            null
         }
     }
 
