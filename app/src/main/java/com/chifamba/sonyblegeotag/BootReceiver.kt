@@ -10,8 +10,8 @@ class BootReceiver : BroadcastReceiver() {
         if (intent.action == Intent.ACTION_BOOT_COMPLETED) {
             val sharedPrefs = context.getSharedPreferences("sony_ble_prefs", Context.MODE_PRIVATE)
             val saved = sharedPrefs.getString("last_device_address", null)
-            val savedAddress = if (!saved.isNullOrEmpty()) decryptString(saved) else null
-            if (!savedAddress.isNullOrEmpty()) {
+            val savedAddress = if (saved != null) decryptString(saved) else null
+            if (savedAddress != null) {
                 val serviceIntent = Intent(context, SonyGpsService::class.java).apply {
                     action = SonyGpsService.ACTION_START
                     putExtra(SonyGpsService.EXTRA_DEVICE_ADDRESS, savedAddress)
@@ -25,12 +25,13 @@ class BootReceiver : BroadcastReceiver() {
         }
     }
 
-    private fun decryptString(value: String): String {
+    // Security concern: Return null on decryption failure instead of "" to prevent data loss or overwrite bugs.
+    private fun decryptString(value: String): String? {
         return try {
             CryptoManager.decrypt(value)
         } catch (e: Exception) {
             android.util.Log.e("SonyBootReceiver", "Error decrypting string", e)
-            ""
+            null
         }
     }
 }
