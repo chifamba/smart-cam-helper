@@ -131,7 +131,7 @@ class SonyGpsService : Service() {
         // If system restarts service, targetDeviceAddress is null. Load persisted address.
         if (targetDeviceAddress.isNullOrEmpty()) {
             val saved = sharedPrefs.getString("last_device_address", null)
-            targetDeviceAddress = if (!saved.isNullOrEmpty()) decryptString(saved) else null
+            targetDeviceAddress = if (saved != null) decryptString(saved) else null
         }
 
         if (!targetDeviceAddress.isNullOrEmpty()) {
@@ -148,15 +148,17 @@ class SonyGpsService : Service() {
     }
 
     private fun startServiceForeground() {
-        val channel = NotificationChannel(
-            NOTIFICATION_CHANNEL_ID,
-            "Sony GPS Geotagger Connection",
-            NotificationManager.IMPORTANCE_LOW
-        ).apply {
-            description = "Maintains constant BLE connection and GPS sync with Sony camera."
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = android.app.NotificationChannel(
+                NOTIFICATION_CHANNEL_ID,
+                "Sony GPS Geotagger Connection",
+                android.app.NotificationManager.IMPORTANCE_LOW
+            ).apply {
+                description = "Maintains constant BLE connection and GPS sync with Sony camera."
+            }
+            val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+            notificationManager.createNotificationChannel(channel)
         }
-        val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        notificationManager.createNotificationChannel(channel)
 
         val pendingIntent = PendingIntent.getActivity(
             this, 0,
@@ -544,12 +546,13 @@ class SonyGpsService : Service() {
         }
     }
 
-    private fun decryptString(value: String): String {
+    // Security concern: Return null on decryption failure instead of "" to prevent data loss or overwrite bugs.
+    private fun decryptString(value: String): String? {
         return try {
             CryptoManager.decrypt(value)
         } catch (e: Exception) {
             Log.e(TAG, "Error decrypting string", e)
-            ""
+            null
         }
     }
 

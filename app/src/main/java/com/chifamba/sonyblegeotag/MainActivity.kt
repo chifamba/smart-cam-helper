@@ -297,11 +297,13 @@ class MainActivity : AppCompatActivity() {
                 setPadding(20, 24, 20, 24)
                 gravity = android.view.Gravity.CENTER_VERTICAL
                 isClickable = true
-                focusable = android.view.View.FOCUSABLE
                 
                 val outValue = android.util.TypedValue()
                 theme.resolveAttribute(android.R.attr.selectableItemBackground, outValue, true)
                 setBackgroundResource(outValue.resourceId)
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                row.focusable = android.view.View.FOCUSABLE
             }
 
             val thumbView = android.widget.ImageView(this).apply {
@@ -629,11 +631,13 @@ class MainActivity : AppCompatActivity() {
                 setPadding(20, 24, 20, 24)
                 gravity = android.view.Gravity.CENTER_VERTICAL
                 isClickable = true
-                focusable = android.view.View.FOCUSABLE
                 
                 val outValue = android.util.TypedValue()
                 theme.resolveAttribute(android.R.attr.selectableItemBackground, outValue, true)
                 setBackgroundResource(outValue.resourceId)
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                row.focusable = android.view.View.FOCUSABLE
             }
 
             val thumbView = android.widget.ImageView(this).apply {
@@ -929,8 +933,8 @@ class MainActivity : AppCompatActivity() {
     private fun onAllPermissionsGranted() {
         val sharedPrefs = getSharedPreferences("sony_ble_prefs", Context.MODE_PRIVATE)
         val saved = sharedPrefs.getString("last_device_address", null)
-        val savedAddress = if (!saved.isNullOrEmpty()) decryptString(saved) else null
-        if (!savedAddress.isNullOrEmpty()) {
+        val savedAddress = if (saved != null) decryptString(saved) else null
+        if (savedAddress != null) {
             discoveredDeviceAddress = savedAddress
             statusTextView.text = "Status: Service Active.\nConnected camera: $savedAddress"
             startServiceButton.isEnabled = false
@@ -1085,12 +1089,13 @@ class MainActivity : AppCompatActivity() {
 
 
 
-    private fun decryptString(value: String): String {
+    // Security concern: Return null on decryption failure instead of "" to prevent data loss or overwrite bugs.
+    private fun decryptString(value: String): String? {
         return try {
             CryptoManager.decrypt(value)
         } catch (e: Exception) {
             Log.e("SonyMainActivity", "Error decrypting string", e)
-            ""
+            null
         }
     }
 
