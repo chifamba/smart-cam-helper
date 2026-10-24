@@ -134,7 +134,7 @@ class SonyGpsService : Service() {
             targetDeviceAddress = if (!saved.isNullOrEmpty()) decryptString(saved) else null
         }
 
-        if (!targetDeviceAddress.isNullOrEmpty()) {
+        if (targetDeviceAddress != null) {
             startServiceForeground()
             mainHandler.removeCallbacks(reconnectRunnable)
             mainHandler.post(reconnectRunnable)
@@ -544,12 +544,12 @@ class SonyGpsService : Service() {
         }
     }
 
-    private fun decryptString(value: String): String {
+    private fun decryptString(value: String): String? {
         return try {
             CryptoManager.decrypt(value)
         } catch (e: Exception) {
             Log.e(TAG, "Error decrypting string", e)
-            ""
+            null
         }
     }
 
