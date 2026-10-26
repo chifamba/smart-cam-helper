@@ -297,7 +297,11 @@ class MainActivity : AppCompatActivity() {
                 setPadding(20, 24, 20, 24)
                 gravity = android.view.Gravity.CENTER_VERTICAL
                 isClickable = true
-                focusable = android.view.View.FOCUSABLE
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                    focusable = android.view.View.FOCUSABLE
+                } else {
+                    isFocusable = true
+                }
                 
                 val outValue = android.util.TypedValue()
                 theme.resolveAttribute(android.R.attr.selectableItemBackground, outValue, true)
@@ -629,7 +633,11 @@ class MainActivity : AppCompatActivity() {
                 setPadding(20, 24, 20, 24)
                 gravity = android.view.Gravity.CENTER_VERTICAL
                 isClickable = true
-                focusable = android.view.View.FOCUSABLE
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                    focusable = android.view.View.FOCUSABLE
+                } else {
+                    isFocusable = true
+                }
                 
                 val outValue = android.util.TypedValue()
                 theme.resolveAttribute(android.R.attr.selectableItemBackground, outValue, true)
@@ -930,7 +938,7 @@ class MainActivity : AppCompatActivity() {
         val sharedPrefs = getSharedPreferences("sony_ble_prefs", Context.MODE_PRIVATE)
         val saved = sharedPrefs.getString("last_device_address", null)
         val savedAddress = if (!saved.isNullOrEmpty()) decryptString(saved) else null
-        if (!savedAddress.isNullOrEmpty()) {
+        if (savedAddress != null) {
             discoveredDeviceAddress = savedAddress
             statusTextView.text = "Status: Service Active.\nConnected camera: $savedAddress"
             startServiceButton.isEnabled = false
@@ -1085,12 +1093,13 @@ class MainActivity : AppCompatActivity() {
 
 
 
-    private fun decryptString(value: String): String {
+    private fun decryptString(value: String): String? {
         return try {
             CryptoManager.decrypt(value)
         } catch (e: Exception) {
             Log.e("SonyMainActivity", "Error decrypting string", e)
-            ""
+            // Security Fix: Fail securely by returning null instead of empty string
+            null
         }
     }
 
