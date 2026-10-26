@@ -134,7 +134,7 @@ class SonyGpsService : Service() {
             targetDeviceAddress = if (!saved.isNullOrEmpty()) decryptString(saved) else null
         }
 
-        if (!targetDeviceAddress.isNullOrEmpty()) {
+        if (targetDeviceAddress != null && targetDeviceAddress!!.isNotEmpty()) {
             startServiceForeground()
             mainHandler.removeCallbacks(reconnectRunnable)
             mainHandler.post(reconnectRunnable)
@@ -148,15 +148,17 @@ class SonyGpsService : Service() {
     }
 
     private fun startServiceForeground() {
-        val channel = NotificationChannel(
-            NOTIFICATION_CHANNEL_ID,
-            "Sony GPS Geotagger Connection",
-            NotificationManager.IMPORTANCE_LOW
-        ).apply {
-            description = "Maintains constant BLE connection and GPS sync with Sony camera."
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            val channel = android.app.NotificationChannel(
+                NOTIFICATION_CHANNEL_ID,
+                "Sony GPS Geotagger Connection",
+                NotificationManager.IMPORTANCE_LOW
+            ).apply {
+                description = "Maintains constant BLE connection and GPS sync with Sony camera."
+            }
+            val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            notificationManager.createNotificationChannel(channel)
         }
-        val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        notificationManager.createNotificationChannel(channel)
 
         val pendingIntent = PendingIntent.getActivity(
             this, 0,
@@ -544,12 +546,13 @@ class SonyGpsService : Service() {
         }
     }
 
-    private fun decryptString(value: String): String {
+    private fun decryptString(value: String): String? {
         return try {
             CryptoManager.decrypt(value)
         } catch (e: Exception) {
             Log.e(TAG, "Error decrypting string", e)
-            ""
+            // Security Fix: Fail securely by returning null instead of empty string
+            null
         }
     }
 
