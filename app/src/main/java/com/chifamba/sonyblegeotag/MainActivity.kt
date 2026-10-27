@@ -297,7 +297,7 @@ class MainActivity : AppCompatActivity() {
                 setPadding(20, 24, 20, 24)
                 gravity = android.view.Gravity.CENTER_VERTICAL
                 isClickable = true
-                focusable = android.view.View.FOCUSABLE
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) { focusable = android.view.View.FOCUSABLE }
                 
                 val outValue = android.util.TypedValue()
                 theme.resolveAttribute(android.R.attr.selectableItemBackground, outValue, true)
@@ -629,7 +629,7 @@ class MainActivity : AppCompatActivity() {
                 setPadding(20, 24, 20, 24)
                 gravity = android.view.Gravity.CENTER_VERTICAL
                 isClickable = true
-                focusable = android.view.View.FOCUSABLE
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) { focusable = android.view.View.FOCUSABLE }
                 
                 val outValue = android.util.TypedValue()
                 theme.resolveAttribute(android.R.attr.selectableItemBackground, outValue, true)

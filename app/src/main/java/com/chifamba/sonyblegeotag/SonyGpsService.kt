@@ -148,7 +148,7 @@ class SonyGpsService : Service() {
     }
 
     private fun startServiceForeground() {
-        val channel = NotificationChannel(
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) { val channel = NotificationChannel(
             NOTIFICATION_CHANNEL_ID,
             "Sony GPS Geotagger Connection",
             NotificationManager.IMPORTANCE_LOW
@@ -156,7 +156,7 @@ class SonyGpsService : Service() {
             description = "Maintains constant BLE connection and GPS sync with Sony camera."
         }
         val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        notificationManager.createNotificationChannel(channel)
+        notificationManager.createNotificationChannel(channel) }
 
         val pendingIntent = PendingIntent.getActivity(
             this, 0,
